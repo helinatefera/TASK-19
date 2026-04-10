@@ -1,0 +1,182 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: civiccrowd_postgres
+    environment:
+      POSTGRES_DB: civiccrowd
+      POSTGRES_USER: civiccrowd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U civiccrowd"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - civiccrowd
+    restart: unless-stopped
+
+  backend-app:
+    build:
+      context: ./backend
+      dockerfile: docker/php/Dockerfile
+    container_name: civiccrowd_backend_app
+    volumes:
+      - ./backend:/var/www/html
+      - ./API_tests:/var/www/html/API_tests
+      - ./unit_tests:/var/www/html/unit_tests
+    environment:
+      APP_NAME: CivicCrowd
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: http://localhost:8081
+      APP_KEY: ${APP_KEY:-}
+      APP_TIMEZONE: UTC
+      APP_LOCALE: en
+      APP_FALLBACK_LOCALE: en
+      APP_CIPHER: AES-256-CBC
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: civiccrowd
+      DB_USERNAME: civiccrowd
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      SESSION_DRIVER: database
+      SESSION_LIFETIME: 120
+      SESSION_ENCRYPT: "true"
+      CACHE_STORE: database
+      QUEUE_CONNECTION: database
+      BROADCAST_CONNECTION: log
+      MAIL_MAILER: log
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: warning
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - civiccrowd
+    restart: unless-stopped
+
+  backend-nginx:
+    image: nginx:1.27-alpine
+    container_name: civiccrowd_backend_nginx
+    ports:
+      - "8081:80"
+    volumes:
+      - ./backend:/var/www/html
+      - ./backend/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - backend-app
+    networks:
+      - civiccrowd
+    restart: unless-stopped
+
+  backend-queue:
+    build:
+      context: ./backend
+      dockerfile: docker/php/Dockerfile
+    container_name: civiccrowd_backend_queue
+    command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    volumes:
+      - ./backend:/var/www/html
+    environment:
+      APP_NAME: CivicCrowd
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY:-}
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: civiccrowd
+      DB_USERNAME: civiccrowd
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      QUEUE_CONNECTION: database
+      CACHE_STORE: database
+      MAIL_MAILER: log
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: warning
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - civiccrowd
+    restart: unless-stopped
+
+  backend-scheduler:
+    build:
+      context: ./backend
+      dockerfile: docker/php/Dockerfile
+    container_name: civiccrowd_backend_scheduler
+    command: sh -c "while true; do php artisan schedule:run --no-interaction; sleep 60; done"
+    volumes:
+      - ./backend:/var/www/html
+    environment:
+      APP_NAME: CivicCrowd
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_KEY: ${APP_KEY:-}
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: civiccrowd
+      DB_USERNAME: civiccrowd
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      QUEUE_CONNECTION: database
+      CACHE_STORE: database
+      MAIL_MAILER: log
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: warning
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - civiccrowd
+    restart: unless-stopped
+
+  frontend-app:
+    build:
+      context: ./frontend
+      dockerfile: docker/php/Dockerfile
+    container_name: civiccrowd_frontend_app
+    volumes:
+      - ./frontend:/var/www/html
+    environment:
+      APP_NAME: CivicCrowd
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_URL: http://localhost:8080
+      APP_KEY: ${FRONTEND_APP_KEY:-}
+      BACKEND_URL: http://backend-nginx:80
+      SESSION_DRIVER: file
+      SESSION_LIFETIME: 120
+      SESSION_ENCRYPT: "true"
+      CACHE_STORE: file
+      LOG_CHANNEL: stderr
+      LOG_LEVEL: warning
+    depends_on:
+      - backend-nginx
+    networks:
+      - civiccrowd
+    restart: unless-stopped
+
+  frontend-nginx:
+    image: nginx:1.27-alpine
+    container_name: civiccrowd_frontend_nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./frontend:/var/www/html
+      - ./frontend/docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - frontend-app
+    networks:
+      - civiccrowd
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+networks:
+  civiccrowd:
+    driver: bridge
