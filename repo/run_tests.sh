@@ -173,15 +173,11 @@ echo ""
 # -------------------------------------------------------------------
 
 # Symlink shared test directories into backend (mirrors Docker volume mounts).
-# Replace empty placeholder dirs with symlinks to the real test directories.
+# Remove whatever exists (symlink, directory, or file) and recreate the symlink.
 for dir_name in API_tests unit_tests; do
     if [ -d "$ROOT/$dir_name" ]; then
-        if [ -d "$BACKEND/$dir_name" ] && [ ! -L "$BACKEND/$dir_name" ]; then
-            rm -rf "$BACKEND/$dir_name"
-        fi
-        if [ ! -e "$BACKEND/$dir_name" ]; then
-            ln -s "$ROOT/$dir_name" "$BACKEND/$dir_name"
-        fi
+        rm -rf "$BACKEND/$dir_name"
+        ln -s "$ROOT/$dir_name" "$BACKEND/$dir_name"
     fi
 done
 

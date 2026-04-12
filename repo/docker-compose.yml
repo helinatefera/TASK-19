@@ -1,3 +1,17 @@
+x-backend-env: &backend-env
+  APP_NAME: CivicCrowd
+  APP_KEY: ${APP_KEY:-base64:Y2l2aWNjcm93ZC1sb2NhbC1kZXYta2V5LTMyYnl0ZXM=}
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_DATABASE: civiccrowd
+  DB_USERNAME: civiccrowd
+  DB_PASSWORD: ${POSTGRES_PASSWORD:-civiccrowd_dev_secret}
+  CACHE_STORE: database
+  QUEUE_CONNECTION: database
+  MAIL_MAILER: log
+  LOG_CHANNEL: stderr
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -28,29 +42,18 @@ services:
       - ./API_tests:/var/www/html/API_tests
       - ./unit_tests:/var/www/html/unit_tests
     environment:
-      APP_NAME: CivicCrowd
+      <<: *backend-env
       APP_ENV: local
       APP_DEBUG: "true"
       APP_URL: http://localhost:8081
-      APP_KEY: ${APP_KEY:-}
       APP_TIMEZONE: UTC
       APP_LOCALE: en
       APP_FALLBACK_LOCALE: en
       APP_CIPHER: AES-256-CBC
-      DB_CONNECTION: pgsql
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_DATABASE: civiccrowd
-      DB_USERNAME: civiccrowd
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-civiccrowd_dev_secret}
       SESSION_DRIVER: database
       SESSION_LIFETIME: 120
       SESSION_ENCRYPT: "true"
-      CACHE_STORE: database
-      QUEUE_CONNECTION: database
       BROADCAST_CONNECTION: log
-      MAIL_MAILER: log
-      LOG_CHANNEL: stderr
       LOG_LEVEL: debug
     depends_on:
       postgres:
@@ -82,20 +85,9 @@ services:
     volumes:
       - ./backend:/var/www/html
     environment:
-      APP_NAME: CivicCrowd
+      <<: *backend-env
       APP_ENV: local
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY:-}
-      DB_CONNECTION: pgsql
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_DATABASE: civiccrowd
-      DB_USERNAME: civiccrowd
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-civiccrowd_dev_secret}
-      QUEUE_CONNECTION: database
-      CACHE_STORE: database
-      MAIL_MAILER: log
-      LOG_CHANNEL: stderr
       LOG_LEVEL: warning
     depends_on:
       postgres:
@@ -113,20 +105,9 @@ services:
     volumes:
       - ./backend:/var/www/html
     environment:
-      APP_NAME: CivicCrowd
+      <<: *backend-env
       APP_ENV: local
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY:-}
-      DB_CONNECTION: pgsql
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_DATABASE: civiccrowd
-      DB_USERNAME: civiccrowd
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-civiccrowd_dev_secret}
-      QUEUE_CONNECTION: database
-      CACHE_STORE: database
-      MAIL_MAILER: log
-      LOG_CHANNEL: stderr
       LOG_LEVEL: warning
     depends_on:
       postgres:
@@ -147,7 +128,7 @@ services:
       APP_ENV: local
       APP_DEBUG: "true"
       APP_URL: http://localhost:8080
-      APP_KEY: ${FRONTEND_APP_KEY:-}
+      APP_KEY: ${FRONTEND_APP_KEY:-base64:Y2l2aWNjcm93ZC1mcm9udGVuZC1kZXYta2V5LTMyISE=}
       BACKEND_URL: http://backend-nginx:80
       SESSION_DRIVER: file
       SESSION_LIFETIME: 120
