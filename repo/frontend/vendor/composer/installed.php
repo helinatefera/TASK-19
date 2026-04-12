@@ -3,7 +3,7 @@
         'name' => 'civiccrowd/frontend',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => 'ffd7d573f98d0bee28be636dc822b54be40250ab',
+        'reference' => '550fe65fd8428b5f66ab3b09274b3ef64b7613e8',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -40,7 +40,7 @@
         'civiccrowd/frontend' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => 'ffd7d573f98d0bee28be636dc822b54be40250ab',
+            'reference' => '550fe65fd8428b5f66ab3b09274b3ef64b7613e8',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
