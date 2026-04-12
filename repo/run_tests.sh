@@ -4,9 +4,14 @@ set -euo pipefail
 # =============================================================================
 # CivicCrowd Test Runner
 #
-# Self-bootstrapping: installs PHP via Homebrew if absent, uses SQLite
-# in-memory databases, requires zero external services (no Docker, no
-# PostgreSQL, no network after initial setup).
+# Two execution modes:
+#   1. Docker mode – if the civiccrowd containers are already running, tests
+#      execute inside them (PHP 8.4, no host dependencies beyond Docker).
+#   2. Host mode – runs directly on the host with a local PHP >= 8.3.
+#      Self-bootstrapping: installs PHP via Homebrew if absent, uses SQLite
+#      in-memory databases, requires zero external services.
+#
+# The script auto-detects which mode to use.
 # =============================================================================
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -16,33 +21,139 @@ PASS=0
 FAIL=0
 SUITES=0
 
+BACKEND_CONTAINER="civiccrowd_backend_app"
+FRONTEND_CONTAINER="civiccrowd_frontend_app"
+
+# ===================================================================
+# Docker mode helpers
+# ===================================================================
+docker_containers_running() {
+    command -v docker &>/dev/null || return 1
+    docker inspect -f '{{.State.Running}}' "$BACKEND_CONTAINER" 2>/dev/null | grep -q true || return 1
+    docker inspect -f '{{.State.Running}}' "$FRONTEND_CONTAINER" 2>/dev/null | grep -q true || return 1
+    return 0
+}
+
+wait_for_container() {
+    local ctr="$1"
+    local max=60
+    local elapsed=0
+    echo "[Setup] Waiting for $ctr to be ready..."
+    while [ $elapsed -lt $max ]; do
+        if docker exec "$ctr" php -r 'echo "ok";' &>/dev/null; then
+            return 0
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    echo "[WARN] Timed out waiting for $ctr – running tests anyway."
+}
+
+run_tests_docker() {
+    echo "[Mode] Docker – running tests inside containers"
+    echo ""
+
+    wait_for_container "$BACKEND_CONTAINER"
+
+    # Ensure composer deps are installed inside the backend container
+    echo "[Setup] Installing backend dependencies inside container..."
+    docker exec "$BACKEND_CONTAINER" composer install --no-interaction --ignore-platform-reqs 2>&1 || true
+    echo ""
+
+    # ---- Backend Unit Tests ----
+    echo "============================================"
+    echo "  Running Backend Unit Tests"
+    echo "============================================"
+    echo ""
+    SUITES=$((SUITES + 1))
+
+    if docker exec "$BACKEND_CONTAINER" php artisan test --testsuite=unit_tests 2>&1; then
+        echo ""
+        echo "[PASS] Backend unit tests passed."
+        PASS=$((PASS + 1))
+    else
+        echo ""
+        echo "[FAIL] Backend unit tests failed."
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+
+    # ---- Backend API Tests ----
+    echo "============================================"
+    echo "  Running Backend API Tests"
+    echo "============================================"
+    echo ""
+    SUITES=$((SUITES + 1))
+
+    if docker exec "$BACKEND_CONTAINER" php artisan test --testsuite=api_tests 2>&1; then
+        echo ""
+        echo "[PASS] Backend API tests passed."
+        PASS=$((PASS + 1))
+    else
+        echo ""
+        echo "[FAIL] Backend API tests failed."
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+
+    # ---- Frontend Tests ----
+    echo "============================================"
+    echo "  Running Frontend Tests"
+    echo "============================================"
+    echo ""
+    SUITES=$((SUITES + 1))
+
+    wait_for_container "$FRONTEND_CONTAINER"
+
+    # Ensure composer deps are installed inside the frontend container
+    echo "[Setup] Installing frontend dependencies inside container..."
+    docker exec "$FRONTEND_CONTAINER" composer install --no-interaction --ignore-platform-reqs 2>&1 || true
+
+    if docker exec "$FRONTEND_CONTAINER" php artisan test 2>&1; then
+        echo ""
+        echo "[PASS] Frontend tests passed."
+        PASS=$((PASS + 1))
+    else
+        echo ""
+        echo "[FAIL] Frontend tests failed."
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+}
+
+# ===================================================================
+# Host mode helpers
+# ===================================================================
 PHP=""
 COMPOSER=""
 
-# -------------------------------------------------------------------
-# Detect or install PHP
-# -------------------------------------------------------------------
 find_php() {
-    for candidate in php php8.4 php8.3; do
+    for candidate in php8.4 php8.3 php; do
         local p
         p="$(command -v "$candidate" 2>/dev/null || true)"
         if [ -n "$p" ]; then
-            local ver
-            ver="$("$p" -r 'echo PHP_MAJOR_VERSION;' 2>/dev/null || echo 0)"
-            if [ "$ver" -ge 8 ]; then
+            local major minor
+            major="$("$p" -r 'echo PHP_MAJOR_VERSION;' 2>/dev/null || echo 0)"
+            minor="$("$p" -r 'echo PHP_MINOR_VERSION;' 2>/dev/null || echo 0)"
+            if [ "$major" -gt 8 ] || { [ "$major" -eq 8 ] && [ "$minor" -ge 3 ]; }; then
                 PHP="$p"
                 return 0
             fi
         fi
     done
 
-    # Check Homebrew keg-only paths (php@8.x are keg-only)
+    # Check Homebrew keg-only paths
     for keg in /opt/homebrew/opt/php@8.4/bin/php /opt/homebrew/opt/php@8.3/bin/php \
                /usr/local/opt/php@8.4/bin/php /usr/local/opt/php@8.3/bin/php \
                /opt/homebrew/opt/php/bin/php /usr/local/opt/php/bin/php; do
         if [ -x "$keg" ]; then
-            PHP="$keg"
-            return 0
+            local major minor
+            major="$("$keg" -r 'echo PHP_MAJOR_VERSION;' 2>/dev/null || echo 0)"
+            minor="$("$keg" -r 'echo PHP_MINOR_VERSION;' 2>/dev/null || echo 0)"
+            if [ "$major" -gt 8 ] || { [ "$major" -eq 8 ] && [ "$minor" -ge 3 ]; }; then
+                PHP="$keg"
+                return 0
+            fi
         fi
     done
 
@@ -50,22 +161,19 @@ find_php() {
 }
 
 install_php() {
-    echo "[Bootstrap] PHP not found. Installing php@8.4 via Homebrew..."
+    echo "[Bootstrap] PHP >= 8.3 not found. Attempting to install php@8.4 via Homebrew..."
     if ! command -v brew &>/dev/null; then
-        echo "[FATAL] Homebrew is required to auto-install PHP."
-        echo "        Install it from https://brew.sh then re-run this script."
+        echo "[FATAL] PHP >= 8.3 is required but not found, and Homebrew is not"
+        echo "        available to auto-install it."
         exit 1
     fi
     brew install php@8.4 2>&1 | tail -5
     find_php || {
-        echo "[FATAL] PHP installation succeeded but binary not found."
+        echo "[FATAL] PHP installation succeeded but a suitable binary (>= 8.3) was not found."
         exit 1
     }
 }
 
-# -------------------------------------------------------------------
-# Detect or install Composer
-# -------------------------------------------------------------------
 find_composer() {
     if command -v composer &>/dev/null; then
         COMPOSER="composer"
@@ -92,11 +200,6 @@ install_composer() {
     COMPOSER="$PHP $ROOT/.composer.phar"
 }
 
-# -------------------------------------------------------------------
-# Generate a minimal .env for a Laravel project directory.
-# Everything is self-contained — no .env.example needed.
-# phpunit.xml overrides DB, cache, etc. for testing anyway.
-# -------------------------------------------------------------------
 generate_env() {
     local dir="$1"
     local app_name="$2"
@@ -122,132 +225,128 @@ BROADCAST_CONNECTION=null
 ENVEOF
 }
 
-# -------------------------------------------------------------------
-# Prepare a Laravel project directory for local testing
-#   Usage: prepare_project <dir> <app_name>
-# -------------------------------------------------------------------
 prepare_project() {
     local dir="$1"
     local app_name="${2:-Laravel}"
 
-    # 1. Ensure all required Laravel directories exist
     mkdir -p "$dir/bootstrap/cache" \
              "$dir/storage/logs" \
              "$dir/storage/framework/sessions" \
              "$dir/storage/framework/views" \
              "$dir/storage/framework/cache"
 
-    # 2. Generate a clean .env inline — no dependency on .env.example.
-    #    Tests override everything via phpunit.xml anyway.
     generate_env "$dir" "$app_name"
 
-    # 3. Install Composer dependencies (don't swallow errors)
     echo "[Setup] Installing dependencies in $(basename "$dir")..."
-    (cd "$dir" && $COMPOSER install --no-interaction 2>&1) || {
+    (cd "$dir" && $COMPOSER install --no-interaction --ignore-platform-reqs 2>&1) || {
         echo "[FATAL] Composer install failed in $(basename "$dir"). See output above."
         exit 1
     }
 }
 
-# -------------------------------------------------------------------
-# Bootstrap
-# -------------------------------------------------------------------
+run_tests_host() {
+    echo "[Mode] Host – running tests with local PHP"
+    echo ""
+
+    if ! find_php; then
+        install_php
+    fi
+    echo "[Setup] Using PHP: $PHP ($($PHP -r 'echo phpversion();'))"
+
+    if ! find_composer; then
+        install_composer
+    fi
+    echo "[Setup] Using Composer: $COMPOSER"
+    echo ""
+
+    # Symlink shared test directories into backend
+    for dir_name in API_tests unit_tests; do
+        if [ -d "$ROOT/$dir_name" ]; then
+            rm -rf "$BACKEND/$dir_name"
+            ln -s "$ROOT/$dir_name" "$BACKEND/$dir_name"
+        fi
+    done
+
+    prepare_project "$BACKEND" "CivicCrowd-Backend"
+    echo ""
+
+    # ---- Backend Unit Tests ----
+    echo "============================================"
+    echo "  Running Backend Unit Tests"
+    echo "============================================"
+    echo ""
+    SUITES=$((SUITES + 1))
+
+    if (cd "$BACKEND" && $PHP artisan test --testsuite=unit_tests 2>&1); then
+        echo ""
+        echo "[PASS] Backend unit tests passed."
+        PASS=$((PASS + 1))
+    else
+        echo ""
+        echo "[FAIL] Backend unit tests failed."
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+
+    # ---- Backend API Tests ----
+    echo "============================================"
+    echo "  Running Backend API Tests"
+    echo "============================================"
+    echo ""
+    SUITES=$((SUITES + 1))
+
+    if (cd "$BACKEND" && $PHP artisan test --testsuite=api_tests 2>&1); then
+        echo ""
+        echo "[PASS] Backend API tests passed."
+        PASS=$((PASS + 1))
+    else
+        echo ""
+        echo "[FAIL] Backend API tests failed."
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+
+    # ---- Frontend Tests ----
+    echo "============================================"
+    echo "  Running Frontend Tests"
+    echo "============================================"
+    echo ""
+    SUITES=$((SUITES + 1))
+
+    prepare_project "$FRONTEND" "CivicCrowd"
+
+    if (cd "$FRONTEND" && $PHP artisan test 2>&1); then
+        echo ""
+        echo "[PASS] Frontend tests passed."
+        PASS=$((PASS + 1))
+    else
+        echo ""
+        echo "[FAIL] Frontend tests failed."
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+}
+
+# ===================================================================
+#  Main
+# ===================================================================
 echo "============================================"
 echo "  CivicCrowd Test Runner"
 echo "============================================"
 echo ""
 
-if ! find_php; then
+if docker_containers_running; then
+    run_tests_docker
+elif find_php; then
+    run_tests_host
+elif docker_containers_running; then
+    # Shouldn't reach here but just in case
+    run_tests_docker
+else
+    # No suitable PHP and no Docker – try installing
     install_php
+    run_tests_host
 fi
-echo "[Setup] Using PHP: $PHP ($($PHP -r 'echo phpversion();'))"
-
-if ! find_composer; then
-    install_composer
-fi
-echo "[Setup] Using Composer: $COMPOSER"
-echo ""
-
-# -------------------------------------------------------------------
-# Prepare backend
-# -------------------------------------------------------------------
-
-# Symlink shared test directories into backend (mirrors Docker volume mounts).
-# Remove whatever exists (symlink, directory, or file) and recreate the symlink.
-for dir_name in API_tests unit_tests; do
-    if [ -d "$ROOT/$dir_name" ]; then
-        rm -rf "$BACKEND/$dir_name"
-        ln -s "$ROOT/$dir_name" "$BACKEND/$dir_name"
-    fi
-done
-
-prepare_project "$BACKEND" "CivicCrowd-Backend"
-echo ""
-
-# ===================================================================
-#  Backend Unit Tests
-# ===================================================================
-echo "============================================"
-echo "  Running Backend Unit Tests"
-echo "============================================"
-echo ""
-SUITES=$((SUITES + 1))
-
-if (cd "$BACKEND" && $PHP artisan test --testsuite=unit_tests 2>&1); then
-    echo ""
-    echo "[PASS] Backend unit tests passed."
-    PASS=$((PASS + 1))
-else
-    echo ""
-    echo "[FAIL] Backend unit tests failed."
-    FAIL=$((FAIL + 1))
-fi
-
-echo ""
-
-# ===================================================================
-#  Backend API Tests
-# ===================================================================
-echo "============================================"
-echo "  Running Backend API Tests"
-echo "============================================"
-echo ""
-SUITES=$((SUITES + 1))
-
-if (cd "$BACKEND" && $PHP artisan test --testsuite=api_tests 2>&1); then
-    echo ""
-    echo "[PASS] Backend API tests passed."
-    PASS=$((PASS + 1))
-else
-    echo ""
-    echo "[FAIL] Backend API tests failed."
-    FAIL=$((FAIL + 1))
-fi
-
-echo ""
-
-# ===================================================================
-#  Frontend Tests
-# ===================================================================
-echo "============================================"
-echo "  Running Frontend Tests"
-echo "============================================"
-echo ""
-SUITES=$((SUITES + 1))
-
-prepare_project "$FRONTEND" "CivicCrowd"
-
-if (cd "$FRONTEND" && $PHP artisan test 2>&1); then
-    echo ""
-    echo "[PASS] Frontend tests passed."
-    PASS=$((PASS + 1))
-else
-    echo ""
-    echo "[FAIL] Frontend tests failed."
-    FAIL=$((FAIL + 1))
-fi
-
-echo ""
 
 # ===================================================================
 #  Summary
