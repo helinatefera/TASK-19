@@ -107,14 +107,22 @@ class ReviewForm extends Component
                 }
             }
 
+            $scope = "idempotency:review:{$this->orderId}";
+            $key = session($scope);
+            if (! $key) {
+                $key = 'review-' . $this->orderId . '-' . uniqid();
+                session()->put($scope, $key);
+            }
+
             $this->apiClient->post("/api/orders/{$this->orderId}/reviews", [
                 'side' => $this->side,
                 'overall_rating' => $this->overallRating,
                 'body' => $this->body,
                 'dimensions' => $dimensions,
                 'tags' => $this->tags,
-            ]);
+            ], ['X-Idempotency-Key' => $key]);
 
+            session()->forget($scope);
             $this->submitted = true;
         } catch (RuntimeException $e) {
             $this->errorMessage = $e->getMessage();

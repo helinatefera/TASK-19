@@ -25,6 +25,11 @@ return new class extends Migration
 
         // Database-level immutability: deny UPDATE and DELETE on dispute_decisions.
         // This is the ultimate guard — even raw SQL or DB::table() cannot bypass it.
+        // PL/pgSQL triggers are PostgreSQL-only; skip on other drivers (e.g. SQLite in tests).
+        if (DB::getDriverName() !== 'pgsql') {
+            return;
+        }
+
         DB::unprepared('
             CREATE OR REPLACE FUNCTION deny_dispute_decision_mutation()
             RETURNS TRIGGER AS $$

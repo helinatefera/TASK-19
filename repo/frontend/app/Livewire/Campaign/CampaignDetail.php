@@ -6,6 +6,7 @@ use App\Services\ApiClient;
 use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 #[Layout('layouts.app')]
@@ -34,7 +35,8 @@ class CampaignDetail extends Component
             $response = $this->apiClient->get("/api/campaigns/{$this->campaignId}");
             $this->campaign = $response['campaign'] ?? $response;
         } catch (RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
+            Log::error($e->getMessage(), ['exception' => $e]);
+            session()->flash('error', 'Something went wrong. Please try again.');
         }
     }
 
@@ -50,7 +52,8 @@ class CampaignDetail extends Component
             session()->flash('success', 'Campaign approved successfully.');
             $this->loadCampaign();
         } catch (RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
+            Log::error($e->getMessage(), ['exception' => $e]);
+            session()->flash('error', 'Something went wrong. Please try again.');
         }
     }
 
@@ -68,7 +71,8 @@ class CampaignDetail extends Component
             session()->flash('success', 'Campaign rejected.');
             $this->loadCampaign();
         } catch (RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
+            Log::error($e->getMessage(), ['exception' => $e]);
+            session()->flash('error', 'Something went wrong. Please try again.');
         }
     }
 
@@ -84,7 +88,8 @@ class CampaignDetail extends Component
             session()->flash('success', "Campaign visibility changed to {$newVisibility}.");
             $this->loadCampaign();
         } catch (RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
+            Log::error($e->getMessage(), ['exception' => $e]);
+            session()->flash('error', 'Something went wrong. Please try again.');
         }
     }
 
@@ -95,7 +100,8 @@ class CampaignDetail extends Component
             session()->flash('success', 'Campaign closed.');
             $this->loadCampaign();
         } catch (RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
+            Log::error($e->getMessage(), ['exception' => $e]);
+            session()->flash('error', 'Something went wrong. Please try again.');
         }
     }
 
@@ -106,18 +112,28 @@ class CampaignDetail extends Component
             session()->flash('success', 'Campaign submitted for review.');
             $this->loadCampaign();
         } catch (RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
+            Log::error($e->getMessage(), ['exception' => $e]);
+            session()->flash('error', 'Something went wrong. Please try again.');
         }
     }
 
     public function contribute(int $tierId): void
     {
+        $scope = "idempotency:contribute:{$this->campaignId}:{$tierId}";
+        $key = session($scope);
+        if (! $key) {
+            $key = 'contrib-' . $this->campaignId . '-' . $tierId . '-' . uniqid();
+            session()->put($scope, $key);
+        }
+
         try {
             $response = $this->apiClient->post('/api/orders', [
                 'campaign_id' => $this->campaignId,
                 'reward_tier_id' => $tierId,
-                'request_key' => 'contrib-' . $this->campaignId . '-' . $tierId . '-' . uniqid(),
-            ]);
+                'request_key' => $key,
+            ], ['X-Idempotency-Key' => $key]);
+
+            session()->forget($scope);
 
             $orderId = $response['id'] ?? ($response['data']['id'] ?? null);
             if ($orderId) {
@@ -128,7 +144,8 @@ class CampaignDetail extends Component
             session()->flash('success', 'Contribution order created successfully.');
             $this->loadCampaign();
         } catch (\RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
+            Log::error($e->getMessage(), ['exception' => $e]);
+            session()->flash('error', 'Something went wrong. Please try again.');
         }
     }
 

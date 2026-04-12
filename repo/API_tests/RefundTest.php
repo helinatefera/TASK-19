@@ -37,7 +37,7 @@ test('POST /api/orders/{id}/refunds creates refund request', function () {
     $response = $this->actingAs($this->user)->postJson("/api/orders/{$order->id}/refunds", [
         'reason' => 'I changed my mind',
         'refund_amount' => $this->rewardTier->price,
-    ]);
+    ], ['X-Idempotency-Key' => 'refund-create-' . uniqid()]);
 
     $response->assertStatus(201)
         ->assertJsonStructure([
@@ -72,7 +72,7 @@ test('POST /api/refund-requests/{id}/approve by staff approves refund', function
     $refundResponse = $this->actingAs($this->user)->postJson("/api/orders/{$order->id}/refunds", [
         'reason' => 'Need a refund',
         'refund_amount' => $this->rewardTier->price,
-    ]);
+    ], ['X-Idempotency-Key' => 'refund-for-approve-' . uniqid()]);
 
     $refundRequestId = $refundResponse->json('id');
 
@@ -104,7 +104,7 @@ test('POST /api/refund-requests/{id}/reject by staff rejects refund', function (
     $refundResponse = $this->actingAs($this->user)->postJson("/api/orders/{$order->id}/refunds", [
         'reason' => 'Need a refund',
         'refund_amount' => $this->rewardTier->price,
-    ]);
+    ], ['X-Idempotency-Key' => 'refund-for-reject-' . uniqid()]);
 
     $refundRequestId = $refundResponse->json('id');
 
@@ -137,7 +137,7 @@ test('POST /api/refund-requests/{id}/approve by moderator approves refund', func
     $refundResponse = $this->actingAs($this->user)->postJson("/api/orders/{$order->id}/refunds", [
         'reason' => 'Moderator review needed',
         'refund_amount' => $this->rewardTier->price,
-    ]);
+    ], ['X-Idempotency-Key' => 'refund-for-mod-' . uniqid()]);
 
     $refundRequestId = $refundResponse->json('id');
 
@@ -176,7 +176,7 @@ test('cannot submit refund when after-sales request is pending', function () {
     $response = $this->actingAs($this->user)->postJson("/api/orders/{$order->id}/refunds", [
         'reason' => 'I want a refund too',
         'refund_amount' => $this->rewardTier->price,
-    ]);
+    ], ['X-Idempotency-Key' => 'refund-pending-aftersales-' . uniqid()]);
 
     // Conflict: after-sales is pending, refund must be blocked
     $response->assertStatus(422);
@@ -199,7 +199,7 @@ test('cannot submit refund on non-fulfilled order', function () {
     $response = $this->actingAs($this->user)->postJson("/api/orders/{$order->id}/refunds", [
         'reason' => 'I want a refund',
         'refund_amount' => $this->rewardTier->price,
-    ]);
+    ], ['X-Idempotency-Key' => 'refund-non-fulfilled-' . uniqid()]);
 
     // Should be rejected — only fulfilled orders are eligible for refund
     $response->assertStatus(403);
@@ -223,7 +223,7 @@ test('cannot submit refund after refund window expires', function () {
     $response = $this->actingAs($this->user)->postJson("/api/orders/{$order->id}/refunds", [
         'reason' => 'Late refund attempt',
         'refund_amount' => $this->rewardTier->price,
-    ]);
+    ], ['X-Idempotency-Key' => 'refund-expired-window-' . uniqid()]);
 
     // Should be rejected — refund window has expired
     $response->assertStatus(403);

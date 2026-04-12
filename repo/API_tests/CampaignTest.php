@@ -43,13 +43,14 @@ test('GET /api/campaigns/{id} returns campaign detail with reward tiers', functi
 test('POST /api/campaigns by creator creates campaign', function () {
     $creator = User::where('username', 'creator1')->first();
 
+    $idempotencyKey = 'campaign-create-' . uniqid();
     $response = $this->actingAs($creator)->postJson('/api/campaigns', [
         'title' => 'New Test Campaign',
         'description' => 'A new test campaign description',
         'risk_disclosure' => 'Some risk involved',
         'target_amount' => 500000,
         'duration_days' => 30,
-    ]);
+    ], ['X-Idempotency-Key' => $idempotencyKey]);
 
     $response->assertStatus(201)
         ->assertJsonFragment([
@@ -67,7 +68,7 @@ test('POST /api/campaigns by regular user returns 403', function () {
         'risk_disclosure' => 'Some risk',
         'target_amount' => 100000,
         'duration_days' => 30,
-    ]);
+    ], ['X-Idempotency-Key' => 'campaign-unauth-' . uniqid()]);
 
     $response->assertStatus(403);
 });
@@ -280,4 +281,19 @@ test('POST /api/campaigns/{id}/visibility toggles online/offline', function () {
         ->assertJsonFragment([
             'visibility' => 'online',
         ]);
+});
+
+test('POST /api/campaigns without X-Idempotency-Key returns 422', function () {
+    $creator = User::where('username', 'creator1')->first();
+
+    $response = $this->actingAs($creator)->postJson('/api/campaigns', [
+        'title' => 'Missing Idempotency Key',
+        'description' => 'Should be rejected by middleware',
+        'risk_disclosure' => 'Some risk',
+        'target_amount' => 500000,
+        'duration_days' => 30,
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJson(['msg' => 'The X-Idempotency-Key header is required.']);
 });

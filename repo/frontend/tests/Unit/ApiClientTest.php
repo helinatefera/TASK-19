@@ -75,6 +75,49 @@ test('ApiClient clears session on 401', function () {
     expect(Session::get('api_user'))->toBeNull();
 });
 
+test('ApiClient post forwards explicit X-Idempotency-Key header', function () {
+    Http::fake([
+        '*' => Http::response(['id' => 1]),
+    ]);
+
+    $client = new ApiClient();
+    $client->post('/api/orders', ['campaign_id' => 5], [
+        'X-Idempotency-Key' => 'my-stable-key-123',
+    ]);
+
+    Http::assertSent(fn ($request) =>
+        $request->hasHeader('X-Idempotency-Key', 'my-stable-key-123')
+    );
+});
+
+test('ApiClient post does not auto-generate X-Idempotency-Key when none provided', function () {
+    Http::fake([
+        '*' => Http::response(['ok' => true]),
+    ]);
+
+    $client = new ApiClient();
+    $client->post('/api/campaigns/1/approve', []);
+
+    Http::assertSent(fn ($request) =>
+        ! $request->hasHeader('X-Idempotency-Key')
+    );
+});
+
+test('ApiClient postWithFile forwards explicit X-Idempotency-Key header', function () {
+    Http::fake([
+        '*' => Http::response(['id' => 1]),
+    ]);
+
+    $client = new ApiClient();
+    $client->postWithFile('/api/orders/1/after-sales', ['type' => 'complaint'], 'attachment', null, [
+        'X-Idempotency-Key' => 'aftersales-stable-key',
+    ]);
+
+    Http::assertSent(fn ($request) =>
+        $request->hasHeader('X-Idempotency-Key', 'aftersales-stable-key')
+    );
+});
+
 test('ApiClient login does not require bearer token', function () {
     Http::fake([
         '*/api/auth/login' => Http::response([

@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: civiccrowd
       POSTGRES_USER: civiccrowd
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CivicCrowd_Dev_2026!}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -41,7 +41,7 @@ services:
       DB_PORT: 5432
       DB_DATABASE: civiccrowd
       DB_USERNAME: civiccrowd
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-CivicCrowd_Dev_2026!}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
       SESSION_DRIVER: database
       SESSION_LIFETIME: 120
       SESSION_ENCRYPT: "true"
@@ -90,7 +90,7 @@ services:
       DB_PORT: 5432
       DB_DATABASE: civiccrowd
       DB_USERNAME: civiccrowd
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-CivicCrowd_Dev_2026!}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
       QUEUE_CONNECTION: database
       CACHE_STORE: database
       MAIL_MAILER: log
@@ -121,7 +121,7 @@ services:
       DB_PORT: 5432
       DB_DATABASE: civiccrowd
       DB_USERNAME: civiccrowd
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-CivicCrowd_Dev_2026!}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
       QUEUE_CONNECTION: database
       CACHE_STORE: database
       MAIL_MAILER: log

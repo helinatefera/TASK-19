@@ -76,10 +76,13 @@ class OrderController extends BaseController
             'request_key' => 'required|string|max:255',
         ]);
 
-        // Enforce blacklist restriction
+        // Enforce credit-score restrictions
         $creditScore = $request->user()->creditScore;
         if ($creditScore && ! $creditScore->canPlaceOrders()) {
             return $this->error('Your account is currently restricted from placing orders.', 403);
+        }
+        if ($creditScore && $creditScore->requiresStaffApproval()) {
+            return $this->error('Your account is under review and requires staff approval to place orders.', 403);
         }
 
         $campaign = Campaign::findOrFail($request->input('campaign_id'));

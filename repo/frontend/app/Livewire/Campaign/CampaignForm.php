@@ -28,7 +28,7 @@ class CampaignForm extends Component
     #[Validate('required|numeric|min:1')]
     public float $target_amount = 0;
 
-    #[Validate('required|integer|min:1|max:365')]
+    #[Validate('required|integer|min:7|max:60')]
     public int $duration_days = 30;
 
     /** @var array<int, array{title: string, description: string, price: float, quantity: int, fulfillment_type: string}> */
@@ -91,7 +91,7 @@ class CampaignForm extends Component
             'description' => 'required|string|min:10',
             'risk_disclosure' => 'nullable|string|max:5000',
             'target_amount' => 'required|numeric|min:1',
-            'duration_days' => 'required|integer|min:1|max:365',
+            'duration_days' => 'required|integer|min:7|max:60',
             'rewardTiers' => 'array',
             'rewardTiers.*.title' => 'required|string|max:255',
             'rewardTiers.*.description' => 'nullable|string|max:1000',
@@ -121,7 +121,17 @@ class CampaignForm extends Component
                 $response = $this->apiClient->put("/api/campaigns/{$this->campaignId}", $data);
                 $campaign = $response['campaign'] ?? $response;
             } else {
-                $response = $this->apiClient->post('/api/campaigns', $data);
+                $scope = 'idempotency:campaign:create';
+                $key = session($scope);
+                if (! $key) {
+                    $key = 'campaign-create-' . uniqid();
+                    session()->put($scope, $key);
+                }
+
+                $response = $this->apiClient->post('/api/campaigns', $data, [
+                    'X-Idempotency-Key' => $key,
+                ]);
+                session()->forget($scope);
                 $campaign = $response['campaign'] ?? $response;
             }
 

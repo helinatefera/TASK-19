@@ -59,6 +59,15 @@ class VenueProgramPolicy
     }
 
     /**
+     * Reject a program that is pending review.
+     */
+    public function reject(User $user, VenueProgram $program): bool
+    {
+        return $user->hasPermission('programs.approve')
+            && $program->status === CampaignStatus::PendingReview;
+    }
+
+    /**
      * Toggle visibility of a venue program.
      */
     public function toggleVisibility(User $user, VenueProgram $program): bool

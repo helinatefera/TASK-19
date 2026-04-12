@@ -1,261 +1,231 @@
-# Delivery Acceptance and Project Architecture Audit (Static-Only)
-
-## 1. Verdict
+1. Verdict
 - Overall conclusion: Partial Pass
 
-## 2. Scope and Static Verification Boundary
-- Reviewed scope:
-  - Documentation and test/run guidance: README.md:1, README.md:29, README.md:61, run_tests.sh:1, backend/phpunit.xml:7, frontend/phpunit.xml:7
-  - Backend routes/controllers/middleware/policies/services/models/migrations: backend/routes/api.php:28, backend/app/Http/Controllers/Api/Auth/AuthController.php:19, backend/app/Http/Middleware/EnforceInactivityTimeout.php:18, backend/app/Services/Campaign/CampaignLifecycleService.php:15
-  - Frontend route/component wiring: frontend/routes/web.php:1, frontend/app/Livewire/Booking/SeatMap.php:122, frontend/app/Livewire/Order/OrderList.php:56, frontend/app/Livewire/Notification/NotificationInbox.php:69
-  - Tests and logging: API_tests/AuthTest.php:8, API_tests/BookingTest.php:87, API_tests/AuthorizationTest.php:27, frontend/tests/Feature/NotificationBellTest.php:18, backend/app/Http/Middleware/AuditRequest.php:17
-- Excluded sources:
-  - Excluded all .tmp/** from evidence and conclusions.
-- Intentionally not executed:
-  - No project startup, no docker, no test execution, no external services.
-- Cannot be statically confirmed:
-  - Browser-rendered visual quality, real-time seat contention behavior under concurrent clients, scheduler timing behavior, and environment-specific runtime interactions.
-- Manual verification required for:
-  - End-to-end UX behavior under real browser interactions and multi-user concurrency conditions.
+2. Scope and Static Verification Boundary
+- What was reviewed:
+  - Documentation and setup/test guidance: README.md, PLAN.md, run_tests.sh, docker-compose.yml, phpunit.xml, backend/phpunit.xml
+  - Entry points and route registration: backend/routes/api.php, backend/routes/console.php, frontend/routes/web.php
+  - Security/authn/authz/data isolation: backend/bootstrap/app.php, backend/app/Http/Middleware/*, backend/app/Policies/*, backend/app/Http/Controllers/Api/*
+  - Core domain modules: backend/app/Services/*, backend/app/Models/*, backend/database/migrations/*, backend/database/seeders/*
+  - Frontend integration/client paths: frontend/app/Services/ApiClient.php, frontend/app/Livewire/*
+  - Tests/logging: API_tests/*, unit_tests/*, frontend/tests/*, backend/app/Http/Middleware/AuditRequest.php
+- What was not reviewed:
+  - Binary assets and generated vendor internals for evidence judgments
+  - Any external system behavior beyond static code paths
+- What was intentionally not executed:
+  - No runtime startup, no Docker, no automated tests, no external services
+- Which claims require manual verification:
+  - Runtime duplicate-submission behavior under browser refresh/retry timing
+  - Runtime behavior of scheduled tasks in deployed environment
+  - Actual visual rendering/interaction quality in browser
 
-## 3. Repository / Requirement Mapping Summary
-- Prompt core business goal mapped:
-  - Reservation + crowdfunding with governance/risk/notifications across backend API and Livewire frontend (README.md:1, backend/routes/api.php:32, frontend/routes/web.php:13).
-- Core flow mapping:
-  - Campaign lifecycle transitions: backend/app/Services/Campaign/CampaignLifecycleService.php:15.
-  - Seat lock TTL + booking confirmation: backend/app/Models/SeatLock.php:9, backend/app/Http/Controllers/Api/Booking/BookingController.php:100.
-  - Order/payment/refund/after-sales/logistics/vouchers/reviews/disputes: backend/routes/api.php:112, backend/routes/api.php:146, backend/routes/api.php:178.
-  - Notification localization/timezone rendering: backend/app/Services/Notification/NotificationService.php:13, backend/app/Http/Middleware/SetLocale.php:15.
-- Major constraints mapped:
-  - Argon2id hashing: backend/config/hashing.php:17.
-  - Inactivity timeout: backend/app/Http/Middleware/EnforceInactivityTimeout.php:14.
-  - Role and policy boundaries: backend/routes/api.php:52, backend/app/Http/Middleware/EnforceRole.php:12, backend/app/Policies/OrderPolicy.php:14.
+3. Repository / Requirement Mapping Summary
+- Prompt core business goal:
+  - Local-first civic crowdfunding + reservation platform with governance workflows, risk control, and in-app multilingual/timezone-aware notifications.
+- Required core flows/constraints mapped:
+  - Campaign lifecycle (draft->pending_review->fundraising->success/failure->closed), seat lock TTL, idempotent booking submissions, order lifecycle, after-sales checksum validation, reviews with 72h delayed visibility and masked identities, risk scoring/blacklist + anomaly detection, dispute arbitration immutability.
+- Major implementation areas reviewed:
+  - Backend API/middleware/policies/services/models/migrations/commands
+  - Frontend Livewire integration and API client behavior
+  - Unit/API/frontend static tests and coverage signals
 
-## 4. Section-by-section Review
+4. Section-by-section Review
 
-### 1. Hard Gates
+4.1 Hard Gates
 
-#### 1.1 Documentation and static verifiability
+4.1.1 Documentation and static verifiability
 - Conclusion: Pass
-- Rationale: Startup and test entry points are documented and structurally consistent with repository layout.
-- Evidence: README.md:29, README.md:61, run_tests.sh:1, backend/phpunit.xml:7, frontend/phpunit.xml:7
-- Manual verification note: Runtime health checks remain manual-only by boundary.
+- Rationale: Documentation and static project structure are sufficient for a reviewer to attempt verification.
+- Evidence: README.md:1, README.md:53, run_tests.sh:1, docker-compose.yml:1, phpunit.xml:1
 
-#### 1.2 Material deviation from Prompt
+4.1.2 Material deviation from Prompt
 - Conclusion: Partial Pass
-- Rationale: Implementation stays centered on prompt domain, but core integration gaps remain in order/notification workflows and strict idempotency semantics.
-- Evidence: backend/routes/api.php:60, frontend/routes/web.php:24, frontend/app/Livewire/Order/OrderList.php:68, frontend/app/Livewire/Notification/NotificationInbox.php:74, backend/app/Http/Controllers/Api/Booking/BookingController.php:112
+- Rationale: Major prior contract gaps (idempotency header/checksum missing) were fixed. Remaining material deviations exist in risk-control enforcement and idempotency key strategy quality.
+- Evidence: frontend/app/Services/ApiClient.php:29, frontend/app/Livewire/Booking/SeatMap.php:86, frontend/app/Livewire/Campaign/CampaignDetail.php:126, backend/app/Models/CreditScore.php:71, backend/app/Http/Controllers/Api/Order/OrderController.php:81
 
-### 2. Delivery Completeness
+4.2 Delivery Completeness
 
-#### 2.1 Core requirement coverage
+4.2.1 Core explicit requirement coverage
 - Conclusion: Partial Pass
-- Rationale: Most required modules are present and wired, but some operational user/staff flows are materially inconsistent at API/UI boundaries.
-- Evidence: backend/routes/api.php:112, backend/routes/api.php:146, backend/routes/api.php:178, frontend/app/Livewire/Order/OrderList.php:56
+- Rationale: Most core flows are implemented (campaigns, booking, orders, refunds, after-sales, vouchers, reviews, disputes, notifications). Two high-risk gaps remain in gray-restriction enforcement and robust idempotency semantics.
+- Evidence: backend/routes/api.php:52, backend/routes/api.php:100, backend/routes/api.php:112, backend/routes/api.php:148, backend/routes/api.php:159, backend/routes/api.php:170, backend/routes/api.php:195
 
-#### 2.2 End-to-end 0->1 deliverable shape
+4.2.2 End-to-end deliverable shape (0->1)
 - Conclusion: Pass
-- Rationale: Delivery is a complete multi-module project (backend, frontend, migrations, tests, docs), not a fragment or demo-only snippet.
-- Evidence: README.md:1, backend/database/migrations/2024_01_01_000040_create_audit_logs_table.php:15, frontend/routes/web.php:1, API_tests/AuthTest.php:1
+- Rationale: Delivery is a coherent full-stack project with docs, config, backend/frontend modules, and tests.
+- Evidence: README.md:1, backend/routes/api.php:1, frontend/routes/web.php:1, API_tests/Pest.php:1, unit_tests/Pest.php:1
 
-### 3. Engineering and Architecture Quality
+4.3 Engineering and Architecture Quality
 
-#### 3.1 Structure and module decomposition
+4.3.1 Structure and modular decomposition
 - Conclusion: Pass
-- Rationale: Clear layered decomposition (controllers/services/policies/middleware/models + Livewire components).
-- Evidence: backend/app/Services/Campaign/CampaignLifecycleService.php:13, backend/app/Policies/OrderPolicy.php:7, frontend/app/Livewire/Booking/SeatMap.php:12
+- Rationale: Reasonable separation across controller/service/policy/model layers and distinct Livewire modules.
+- Evidence: backend/app/Services/Campaign/CampaignLifecycleService.php:1, backend/app/Policies/OrderPolicy.php:1, backend/app/Http/Controllers/Api/Order/OrderController.php:1, frontend/app/Livewire/Order/OrderDetail.php:1
 
-#### 3.2 Maintainability and extensibility
+4.3.2 Maintainability and extensibility
 - Conclusion: Partial Pass
-- Rationale: Structure is extensible, but response-shape and query-contract drift between frontend and backend creates maintainability risk.
-- Evidence: backend/app/Http/Controllers/Api/BaseController.php:33, frontend/app/Livewire/Order/OrderList.php:78, frontend/app/Livewire/Notification/NotificationInbox.php:84
+- Rationale: Business parameters and scheduled jobs improve configurability; however, idempotency strategy is not action-stable and gray restrictions are not operationalized.
+- Evidence: backend/database/seeders/BusinessParametersSeeder.php:12, backend/routes/console.php:17, frontend/app/Services/ApiClient.php:29, backend/app/Models/CreditScore.php:71
 
-### 4. Engineering Details and Professionalism
+4.4 Engineering Details and Professionalism
 
-#### 4.1 Error handling, logging, validation, API detail
+4.4.1 Error handling, logging, validation, API design
 - Conclusion: Partial Pass
-- Rationale: Validation and mutation audit logging are broadly implemented, but integration-contract errors degrade reliability for key user workflows.
-- Evidence: backend/app/Http/Controllers/Api/Order/AfterSalesController.php:29, backend/app/Http/Middleware/AuditRequest.php:21, frontend/app/Livewire/Notification/NotificationInbox.php:74, frontend/app/Livewire/Order/OrderList.php:68
+- Rationale: Strong baseline validation/error shaping/audit logging; remaining high-impact business-control gaps still present.
+- Evidence: backend/bootstrap/app.php:45, backend/app/Http/Middleware/AuditRequest.php:17, backend/app/Http/Controllers/Api/Order/AfterSalesController.php:29, backend/app/Http/Middleware/IdempotencyGuard.php:19
 
-#### 4.2 Product-grade vs demo-grade
+4.4.2 Product-like delivery vs demo shape
+- Conclusion: Pass
+- Rationale: System resembles a real service with role gates, scheduler tasks, persistence, and governance modules.
+- Evidence: backend/routes/api.php:230, backend/routes/console.php:17, backend/database/migrations/2024_01_01_000036_create_dispute_decisions_table.php:15
+
+4.5 Prompt Understanding and Requirement Fit
+
+4.5.1 Business goal and constraint fit
 - Conclusion: Partial Pass
-- Rationale: Product-like breadth is present, but unresolved contract defects in order/notification operations reduce production readiness.
-- Evidence: backend/routes/api.php:52, frontend/routes/web.php:24, frontend/resources/views/livewire/order/order-list.blade.php:3, backend/app/Http/Controllers/Api/Order/OrderController.php:26
+- Rationale: Most prompt constraints are represented (Argon2id, review delay/masking, localization templates, immutable dispute decisions), but gray restriction behavior and action-stable idempotency are not sufficiently aligned.
+- Evidence: backend/config/hashing.php:17, backend/app/Services/Review/ReviewService.php:28, backend/app/Services/Notification/NotificationService.php:12, backend/app/Models/DisputeDecision.php:53, backend/app/Models/CreditScore.php:71
 
-### 5. Prompt Understanding and Requirement Fit
-
-#### 5.1 Business understanding and constraint fit
-- Conclusion: Partial Pass
-- Rationale: Core domain semantics are implemented (review delay/masking, locale/timezone rendering, risk/dispute controls), but strict requirement fit is weakened by all-orders operational mismatch, contract drift, and non-mandatory client key enforcement behavior.
-- Evidence: backend/app/Services/Review/ReviewService.php:12, backend/app/Http/Controllers/Api/Review/ReviewController.php:38, backend/app/Services/Notification/NotificationService.php:13, backend/app/Http/Controllers/Api/Booking/BookingController.php:112, backend/app/Services/Booking/BookingService.php:32
-
-### 6. Aesthetics (frontend/full-stack)
-
-#### 6.1 Visual and interaction quality
+4.6 Aesthetics (frontend-only/full-stack)
 - Conclusion: Cannot Confirm Statistically
-- Rationale: Static templates show componentized layouts and interaction states, but rendered visual quality and interaction smoothness require runtime/manual verification.
-- Evidence: frontend/resources/views/livewire/order/order-list.blade.php:1, frontend/resources/views/livewire/booking/seat-map.blade.php:198
-- Manual verification note: Browser-level checks required for spacing, visual hierarchy, hover/transition behavior.
+- Rationale: Static code indicates loading/submitting state hooks, but rendering quality and interaction polish require manual runtime review.
+- Evidence: frontend/resources/views/livewire/booking/seat-map.blade.php:152, frontend/resources/views/livewire/order/order-detail.blade.php:736
+- Manual verification note: Browser walkthrough required.
 
-## 5. Issues / Suggestions (Severity-Rated)
+5. Issues / Suggestions (Severity-Rated)
 
-### Blocker / High
-
-#### F-001
+F-001
 - Severity: High
-- Title: Staff all-orders workflow conflicts with backend user-only order index scope
+- Title: Idempotency key generation is per HTTP call, not per user action, weakening duplicate-prevention semantics
 - Conclusion: Fail
-- Evidence: frontend/resources/views/livewire/order/order-list.blade.php:3, backend/app/Http/Controllers/Api/Order/OrderController.php:26
-- Impact: UI advertises staff-wide operational order view, but backend endpoint only returns current user orders, limiting staff workflows (offline payment/fulfillment operations).
-- Minimum actionable fix: Add role-aware order index behavior (or dedicated staff/admin endpoint) with policy checks and coverage.
+- Evidence: frontend/app/Services/ApiClient.php:29, frontend/app/Services/ApiClient.php:50, frontend/app/Livewire/Booking/SeatMap.php:86, frontend/app/Livewire/Campaign/CampaignDetail.php:126
+- Impact: Prompt-critical protection against duplicate charges/holds "even after refresh" is weakened because retries/refreshes naturally produce new keys.
+- Minimum actionable fix: Generate and persist a stable client request key per logical action (create contribution, lock seats, submit refund/after-sales) and reuse it until success/failure is resolved.
 
-### Medium
-
-#### F-002
-- Severity: Medium
-- Title: Order type filter contract mismatch
+F-002
+- Severity: High
+- Title: Graylist restriction is modeled but not enforced in booking/order decision paths
 - Conclusion: Fail
-- Evidence: frontend/app/Livewire/Order/OrderList.php:68, backend/app/Http/Controllers/Api/Order/OrderController.php:33
-- Impact: Type filtering can silently fail because frontend sends order_type while backend reads type.
-- Minimum actionable fix: Align query param naming on both layers; add API + Livewire filter tests.
+- Evidence: backend/app/Models/CreditScore.php:71, backend/app/Models/CreditScore.php:76, backend/app/Http/Controllers/Api/Order/OrderController.php:81, backend/app/Http/Controllers/Api/Booking/BookingController.php:61
+- Impact: Risk-control requirement for gray/black restriction support is only partially effective; graylisted users are not constrained by API workflow.
+- Minimum actionable fix: Enforce explicit graylist workflow (e.g., staff approval required or operation limits) in order/booking services/controllers and expose state transitions in API/UI.
 
-#### F-003
+F-003
 - Severity: Medium
-- Title: Notification inbox read filter mismatch
-- Conclusion: Fail
-- Evidence: frontend/app/Livewire/Notification/NotificationInbox.php:74, backend/app/Http/Controllers/Api/Notification/NotificationController.php:27
-- Impact: Inbox read/unread filtering is unreliable because frontend sends filter while backend expects read=true|false.
-- Minimum actionable fix: Map UI filter to backend read query contract.
-
-#### F-004
-- Severity: Medium
-- Title: Pagination response parsing mismatch in frontend list components
+- Title: Refund-frequency anomaly evaluation is wired only to RefundApproved events
 - Conclusion: Partial Fail
-- Evidence: backend/app/Http/Controllers/Api/BaseController.php:33, frontend/app/Livewire/Order/OrderList.php:78, frontend/app/Livewire/Notification/NotificationInbox.php:84
-- Impact: Pagination controls can become inaccurate because frontend expects meta while backend pagination fields are top-level.
-- Minimum actionable fix: Normalize frontend paginator parsing for top-level Laravel paginator keys.
+- Evidence: backend/app/Providers/EventServiceProvider.php:99, backend/app/Listeners/RiskControl/EvaluateAnomaly.php:16, backend/app/Services/RiskControl/AnomalyDetectionService.php:18
+- Impact: Frequent refund-request behavior may be detected late or inconsistently if approvals are infrequent.
+- Minimum actionable fix: Trigger refund-frequency anomaly checks on refund request creation and/or scheduled sweep, not only approval events.
 
-#### F-005
+F-004
 - Severity: Medium
-- Title: Strict client-key booking idempotency requirement is weakened by server fallback generation
+- Title: Frontend campaign duration validation remains wider than prompt/backend defaults
 - Conclusion: Partial Fail
-- Evidence: backend/app/Http/Controllers/Api/Booking/BookingController.php:112, backend/app/Services/Booking/BookingService.php:32, frontend/app/Livewire/Booking/SeatMap.php:133
-- Impact: Current behavior is idempotent when key is sent, but strict prompt constraint of client-generated request key is not enforced if header is omitted.
-- Minimum actionable fix: Reject confirm requests missing X-Idempotency-Key and keep client-side key generation/reuse.
+- Evidence: frontend/app/Livewire/Campaign/CampaignForm.php:31, frontend/app/Livewire/Campaign/CampaignForm.php:94, backend/app/Http/Controllers/Api/Campaign/CampaignController.php:80
+- Impact: Avoidable UX validation mismatch against prompt 7-60 day expectation.
+- Minimum actionable fix: Read backend-configured min/max duration and enforce same bounds in frontend validation.
 
-#### F-006
-- Severity: Medium
-- Title: Notification templates are seeded only for English locale
-- Conclusion: Partial Pass
-- Evidence: backend/database/seeders/NotificationTemplateSeeder.php:146, backend/app/Services/Notification/NotificationService.php:13
-- Impact: Locale architecture exists, but prompt example (English/Spanish receipts/messages) is not fully realized by default seed data.
-- Minimum actionable fix: Seed core templates for Spanish locale and add locale-selection coverage.
+F-005
+- Severity: Low
+- Title: Stack documentation can be clearer about backend vs frontend framework versions
+- Conclusion: Partial Fail
+- Evidence: README.md:101, frontend/composer.json:7
+- Impact: Onboarding confusion risk.
+- Minimum actionable fix: Explicitly split backend and frontend framework/version lines in README.
 
-## 6. Security Review Summary
+6. Security Review Summary
 
-- Authentication entry points
-  - Conclusion: Pass
-  - Evidence: backend/routes/api.php:28, backend/routes/api.php:52, backend/app/Http/Controllers/Api/Auth/AuthController.php:19
-  - Reasoning: Login is explicit and authenticated routes are protected under auth:sanctum.
+- Authentication entry points: Pass
+  - Evidence: backend/routes/api.php:28, backend/app/Http/Controllers/Api/Auth/AuthController.php:21, backend/app/Http/Controllers/Api/Auth/AuthController.php:44
+  - Reasoning: Local username/password login + token issuance with lockout/rate controls present.
 
-- Route-level authorization
-  - Conclusion: Pass
-  - Evidence: backend/routes/api.php:61, backend/routes/api.php:230, backend/app/Http/Middleware/EnforceRole.php:12
-  - Reasoning: Privileged route groups are broadly guarded by role middleware.
+- Route-level authorization: Pass
+  - Evidence: backend/routes/api.php:52, backend/routes/api.php:61, backend/routes/api.php:72, backend/routes/api.php:230
+  - Reasoning: auth:sanctum and enforce.role middleware gate privileged surfaces.
 
-- Object-level authorization
-  - Conclusion: Partial Pass
-  - Evidence: backend/app/Http/Controllers/Api/Order/OrderController.php:44, backend/app/Policies/OrderPolicy.php:14, backend/app/Http/Controllers/Api/RiskControl/DisputeController.php:20
-  - Reasoning: Many object checks are present; residual risk remains due uneven test depth for some object-isolation paths.
+- Object-level authorization: Pass
+  - Evidence: backend/app/Http/Controllers/Api/Order/OrderController.php:49, backend/app/Http/Controllers/Api/Voucher/VoucherController.php:38, backend/app/Http/Controllers/Api/RiskControl/DisputeController.php:42
+  - Reasoning: Resource-level policy checks are applied on sensitive object reads/mutations.
 
-- Function-level authorization
-  - Conclusion: Partial Pass
-  - Evidence: backend/app/Policies/OrderPolicy.php:44, backend/app/Http/Controllers/Api/Order/AfterSalesController.php:65, backend/app/Http/Controllers/Api/Order/AfterSalesController.php:88
-  - Reasoning: Mutating actions generally authorize, but some operational frontend/backend mismatches can still constrain legitimate role flows.
+- Function-level authorization: Pass
+  - Evidence: backend/app/Policies/OrderPolicy.php:30, backend/app/Policies/DisputePolicy.php:49, backend/app/Policies/RefundRequestPolicy.php:13
+  - Reasoning: Permission-oriented policy methods are defined and used.
 
-- Tenant / user data isolation
-  - Conclusion: Partial Pass
-  - Evidence: backend/app/Http/Controllers/Api/Order/OrderController.php:26, backend/app/Http/Controllers/Api/Notification/NotificationController.php:23, backend/app/Http/Controllers/Api/RiskControl/DisputeController.php:27
-  - Reasoning: Isolation patterns exist, but comprehensive isolation confidence is limited by test coverage breadth.
+- Tenant / user data isolation: Partial Pass
+  - Evidence: backend/app/Http/Controllers/Api/Order/OrderController.php:29, backend/app/Http/Controllers/Api/Notification/NotificationController.php:23, backend/app/Http/Controllers/Api/Voucher/VoucherController.php:24
+  - Reasoning: User scoping exists for key resources; no explicit multi-tenant architecture in scope.
 
-- Admin / internal / debug endpoint protection
-  - Conclusion: Pass
-  - Evidence: backend/routes/api.php:230, API_tests/AdminTest.php:27
-  - Reasoning: Admin/internal endpoints are grouped behind enforce.role:admin and have explicit non-admin denial tests.
+- Admin / internal / debug protection: Pass
+  - Evidence: backend/routes/api.php:230, backend/app/Http/Controllers/Api/Admin/AdminController.php:16
+  - Reasoning: Admin surfaces are role-gated and namespace-separated.
 
-## 7. Tests and Logging Review
+7. Tests and Logging Review
 
-- Unit tests
-  - Conclusion: Partial Pass
-  - Evidence: backend/phpunit.xml:14, unit_tests/FieldEncryptionTest.php:1
-  - Reasoning: Core unit suites exist, but they do not cover all cross-layer contracts.
+- Unit tests: Pass
+  - Evidence: unit_tests/Pest.php:1, unit_tests/CreditScoreModelTest.php:68, unit_tests/DisputeDecisionImmutabilityTest.php:49
+  - Reasoning: Core model invariants and immutability checks are present.
 
-- API / integration tests
-  - Conclusion: Partial Pass
-  - Evidence: backend/phpunit.xml:17, API_tests/BookingTest.php:87, API_tests/NotificationTest.php:34, API_tests/AuthorizationTest.php:27
-  - Reasoning: Significant API coverage exists; key parameter/shape mismatch scenarios are still under-tested.
+- API / integration tests: Partial Pass
+  - Evidence: API_tests/OrderTest.php:227, API_tests/CampaignTest.php:286, API_tests/AuthorizationTest.php:135, API_tests/BookingTest.php:118
+  - Reasoning: Coverage improved for idempotency and checksum contracts; remaining high-risk graylist/idempotency-strategy behavior lacks direct tests.
 
-- Logging categories / observability
-  - Conclusion: Pass
-  - Evidence: backend/app/Http/Middleware/AuditRequest.php:21, backend/database/migrations/2024_01_01_000040_create_audit_logs_table.php:15
-  - Reasoning: Mutation audit logging and dedicated persistence exist, with DB-level immutability rule for PostgreSQL.
+- Logging categories / observability: Partial Pass
+  - Evidence: backend/app/Http/Middleware/AuditRequest.php:17, backend/database/migrations/2024_01_01_000040_create_audit_logs_table.php:15
+  - Reasoning: Structured audit mutation logging exists; broader domain logging taxonomy is limited.
 
-- Sensitive-data leakage risk in logs / responses
-  - Conclusion: Partial Pass
-  - Evidence: backend/app/Http/Middleware/AuditRequest.php:41, backend/app/Models/User.php:34, backend/app/Models/User.php:47
-  - Reasoning: Sensitive encrypted user fields are hidden/cast appropriately and request payloads are not broadly logged; full runtime-path verification remains manual.
+- Sensitive-data leakage risk in logs / responses: Partial Pass
+  - Evidence: backend/app/Models/User.php:29, backend/app/Http/Middleware/AuditRequest.php:36
+  - Reasoning: Sensitive encrypted fields are hidden; audit log metadata avoids request payload dumps. Full runtime leak absence cannot be proven statically.
 
-## 8. Test Coverage Assessment (Static Audit)
+8. Test Coverage Assessment (Static Audit)
 
-### 8.1 Test Overview
-- Unit tests exist: Yes
-  - Evidence: backend/phpunit.xml:14, unit_tests/Pest.php:1
-- API/integration tests exist: Yes
-  - Evidence: backend/phpunit.xml:17, API_tests/Pest.php:1
-- Frontend tests exist: Yes (feature + unit)
-  - Evidence: frontend/phpunit.xml:7, frontend/tests/Feature/AuthFlowTest.php:1, frontend/tests/Unit/ApiClientTest.php:1
-- Test frameworks and entry points: Pest/PHPUnit, documented via script and artisan suites
-  - Evidence: README.md:61, run_tests.sh:63, backend/phpunit.xml:7, frontend/phpunit.xml:7
-- Documentation provides test commands: Yes
-  - Evidence: README.md:63, run_tests.sh:1
+8.1 Test Overview
+- Unit tests and API/integration tests exist.
+  - Evidence: unit_tests/Pest.php:1, API_tests/Pest.php:1
+- Frontend tests exist (feature + unit), though this is a non-runtime static review.
+  - Evidence: frontend/tests/Feature/OrderDetailTest.php:1, frontend/tests/Unit/ApiClientTest.php:1
+- Test framework: Pest/Laravel testing.
+  - Evidence: API_tests/Pest.php:1, unit_tests/Pest.php:1
+- Test entry points are documented.
+  - Evidence: README.md:53, run_tests.sh:102
 
-### 8.2 Coverage Mapping Table
+8.2 Coverage Mapping Table
 
 | Requirement / Risk Point | Mapped Test Case(s) | Key Assertion / Fixture / Mock | Coverage Assessment | Gap | Minimum Test Addition |
 |---|---|---|---|---|---|
-| Auth login/me/logout + unauthenticated behavior | API_tests/AuthTest.php:8 | 200/401 assertions and token invalidation path | basically covered | No explicit inactivity-timeout expiry test | Add API test forcing expired token last_used_at and asserting 401 session-expired |
-| Booking confirm idempotency | API_tests/BookingTest.php:87 | Same X-Idempotency-Key returns same order | basically covered | Missing-key behavior not enforced/tested | Add API test asserting confirm without idempotency key is rejected if strict mode required |
-| Review submission contract and delayed visibility | API_tests/ReviewTest.php:21, API_tests/ReviewTest.php:93 | dimensions array-of-objects + is_visible false | basically covered | No frontend integration test asserting Livewire request payload format | Add frontend Livewire review form test with outbound payload schema assertion |
-| Public review masking | backend/app/Http/Controllers/Api/Review/ReviewController.php:38 | makeHidden reviewer_id/reviewee_id | insufficient | No API test asserting IDs are absent in public feed | Add API_tests/ReviewTest assertion for missing reviewer_id/reviewee_id in campaigns/{id}/reviews responses |
-| Notification unread count contract | API_tests/NotificationTest.php:58, frontend/tests/Feature/NotificationBellTest.php:18 | unread_count asserted in API + frontend mock | covered | Frontend inbox filtering contract still untested | Add frontend inbox tests for read=true/read=false mapping |
-| Voucher redemption staff authorization | API_tests/VoucherTest.php:42 | staff redeem success + double redeem blocked | basically covered | No frontend voucher display/gate integration test | Add frontend feature test for role-based redeem visibility and action |
-| Object-level authorization isolation | API_tests/AuthorizationTest.php:27 | Dispute ownership 403 path | partially covered | Missing direct order object isolation tests | Add API test for non-owner GET /api/orders/{id} returns 403 |
-| Admin endpoint protection | API_tests/AdminTest.php:27 | non-admin forbidden on /api/admin/users | covered | Minimal depth | Keep and add one audit-log endpoint non-admin denial test |
-| After-sales attachment validation/checksum | backend/app/Http/Controllers/Api/Order/AfterSalesController.php:29 | file type limits + sha256 checksum creation | insufficient | No dedicated API tests for checksum persistence / invalid MIME rejection | Add API tests for valid attachment checksum and invalid MIME 422 |
+| Auth 200/401 and unauthenticated handling | API_tests/AuthTest.php:15, API_tests/AuthTest.php:28, API_tests/ErrorHandlingTest.php:39 | assertStatus + JSON checks | basically covered | inactivity timeout path not directly asserted | add API tests for inactivity expiry per role timeout |
+| Campaign lifecycle transitions | API_tests/CampaignTest.php:105, API_tests/CampaignTest.php:130, API_tests/CampaignTest.php:186 | status transition assertions | sufficient | limited illegal-transition matrix depth | add full illegal-transition matrix tests |
+| Idempotency header enforcement | API_tests/CampaignTest.php:286, API_tests/OrderTest.php:227, API_tests/BookingTest.php:118 | missing-header 422 assertions | sufficient | no assertion for stable key reuse behavior | add repeated refresh/retry simulations with same vs new keys |
+| After-sales checksum contract | API_tests/AuthorizationTest.php:135, API_tests/AuthorizationTest.php:171, API_tests/AuthorizationTest.php:206 | valid checksum 201 + missing/mismatch 422 | sufficient | none critical | add negative case for invalid MIME + checksum pair |
+| Object-level authorization | API_tests/AuthorizationTest.php:41, API_tests/AuthorizationTest.php:99 | cross-user deny checks | basically covered | coverage breadth across all resources limited | add deny tests for notifications/vouchers/order details |
+| Risk restrictions (gray/black) | unit_tests/CreditScoreModelTest.php:84 | model-level gray/black semantics | insufficient | no integration test that gray restriction affects API operations | add API tests for graylisted user booking/order behavior |
+| Anomaly detection for frequent refund requests | API_tests/RiskControlTest.php:46 | chargeback path and credit score response | insufficient | no direct coverage for refund-frequency anomaly triggering | add tests for >3 refund requests in 30-day window anomaly flag |
 
-### 8.3 Security Coverage Audit
-- Authentication: partially covered
-  - Evidence: API_tests/AuthTest.php:8
-  - Notes: Core auth paths covered; inactivity-timeout branch coverage is limited.
-- Route authorization: covered
-  - Evidence: API_tests/AdminTest.php:27, API_tests/RiskControlTest.php:25
-- Object-level authorization: partially covered
-  - Evidence: API_tests/AuthorizationTest.php:27, backend/app/Policies/OrderPolicy.php:14
-  - Notes: Dispute isolation tested; some order/notification object-level abuse paths still under-tested.
-- Tenant / data isolation: partially covered
-  - Evidence: backend/app/Http/Controllers/Api/Order/OrderController.php:26, API_tests/AuthorizationTest.php:27
-  - Notes: Isolation pattern exists but test depth is narrow.
-- Admin / internal protection: covered
-  - Evidence: API_tests/AdminTest.php:27, backend/routes/api.php:230
+8.3 Security Coverage Audit
+- authentication: basically covered
+  - Evidence: API_tests/AuthTest.php:15
+  - Gap: inactivity timeout enforcement not directly tested.
+- route authorization: basically covered
+  - Evidence: API_tests/CampaignTest.php:61, API_tests/RiskControlTest.php:31
+  - Gap: full admin route matrix not exhaustive.
+- object-level authorization: partially covered
+  - Evidence: API_tests/AuthorizationTest.php:41
+  - Gap: several object endpoints still need explicit cross-user deny tests.
+- tenant / data isolation: partially covered
+  - Evidence: API_tests/OrderTest.php:203
+  - Gap: list/isolation assertions not comprehensive across notifications/vouchers/disputes.
+- admin / internal protection: basically covered
+  - Evidence: API_tests/AdminTest.php:30
+  - Gap: sub-resource negative tests are limited.
 
-### 8.4 Final Coverage Judgment
-- Final coverage judgment: Partial Pass
+8.4 Final Coverage Judgment
+- Partial Pass
 - Boundary explanation:
-  - Covered major risks: auth basics, booking idempotent happy path, notification unread count path, admin guard checks, selected dispute authorization.
-  - Uncovered/weak risks: strict idempotency key enforcement, frontend/backend query contract mismatches, and deeper object-level isolation cases.
-  - Result: suites can pass while several integration defects remain undetected.
+  - Covered: core auth/lifecycle/idempotency-header/checksum and multiple failure-path checks.
+  - Not fully covered: risk-control gray restriction behavior and idempotency key stability semantics; severe defects could remain undetected while many tests still pass.
 
-## 9. Final Notes
-- The codebase is substantially aligned with the prompt and shows clear architecture maturity.
-- Several prior critical gaps appear resolved in current code (review payload shape, unread count key contract, role-based voucher gate, and public review identity masking).
-- Remaining material issues are now concentrated in cross-layer contract drift and one high-impact staff workflow contradiction; therefore overall status is Partial Pass, not Pass.
+9. Final Notes
+- Static evidence indicates previously reported header/checksum blockers were resolved.
+- Remaining independent High findings are business-control quality gaps rather than basic project-shape failures.
+- Final acceptance still requires manual verification of runtime duplicate-submission behavior and operational risk-control flows.

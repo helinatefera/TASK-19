@@ -32,4 +32,4 @@
 
 </body>
 </html>
-<?php /**PATH /var/www/html/resources/views/components/layouts/guest.blade.php ENDPATH**/ ?>
+<?php /**PATH /Users/macbookpro/Projects/eaglepoint/TASK-19/repo/frontend/resources/views/components/layouts/guest.blade.php ENDPATH**/ ?>

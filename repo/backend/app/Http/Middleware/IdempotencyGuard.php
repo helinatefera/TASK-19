@@ -19,7 +19,10 @@ class IdempotencyGuard
         $idempotencyKey = $request->header('X-Idempotency-Key');
 
         if (! $idempotencyKey) {
-            return $next($request);
+            return new JsonResponse([
+                'code' => 422,
+                'msg' => 'The X-Idempotency-Key header is required.',
+            ], 422);
         }
 
         $userId = $request->user()?->id ?? 'anonymous';

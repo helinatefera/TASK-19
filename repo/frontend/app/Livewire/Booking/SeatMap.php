@@ -82,10 +82,19 @@ class SeatMap extends Component
             return;
         }
 
+        $scope = "idempotency:lock:{$this->timeSlotId}";
+        $key = session($scope);
+        if (! $key) {
+            $key = 'lock-' . $this->timeSlotId . '-' . uniqid();
+            session()->put($scope, $key);
+        }
+
         try {
             $response = $this->apiClient->post("/api/time-slots/{$this->timeSlotId}/lock", [
                 'quantity' => $this->quantity,
-            ]);
+            ], ['X-Idempotency-Key' => $key]);
+
+            session()->forget($scope);
 
             $lock = $response['lock'] ?? [];
             $this->myLock = [

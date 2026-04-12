@@ -1012,4 +1012,4 @@ unset($__errorArgs, $__bag); ?><?php if(\Livewire\Mechanisms\ExtendBlade\ExtendB
     </div>
 
 </div>
-<?php /**PATH /var/www/html/resources/views/livewire/order/order-detail.blade.php ENDPATH**/ ?>
+<?php /**PATH /Users/macbookpro/Projects/eaglepoint/TASK-19/repo/frontend/resources/views/livewire/order/order-detail.blade.php ENDPATH**/ ?>

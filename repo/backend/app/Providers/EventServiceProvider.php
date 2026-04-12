@@ -17,6 +17,7 @@ use App\Events\OrderPaid;
 use App\Events\OrderRefunded;
 use App\Events\RefundApproved;
 use App\Events\RefundRejected;
+use App\Events\RefundRequested;
 use App\Events\ReviewSubmitted;
 use App\Events\VoucherGenerated;
 use App\Listeners\Audit\WriteAuditLog;
@@ -94,6 +95,11 @@ class EventServiceProvider extends ServiceProvider
             WriteAuditLog::class,
             SendCampaignFailedNotification::class,
             BulkCancelContributionOrders::class,
+        ],
+
+        RefundRequested::class => [
+            WriteAuditLog::class,
+            EvaluateAnomaly::class,
         ],
 
         RefundApproved::class => [

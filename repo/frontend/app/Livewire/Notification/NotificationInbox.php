@@ -3,6 +3,7 @@
 namespace App\Livewire\Notification;
 
 use App\Services\ApiClient;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Url;
@@ -41,7 +42,8 @@ class NotificationInbox extends Component
         try {
             $this->apiClient->post("/api/notifications/{$id}/read");
         } catch (\RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
+            Log::error($e->getMessage(), ['exception' => $e]);
+            session()->flash('error', 'Something went wrong. Please try again.');
         }
     }
 
@@ -50,7 +52,8 @@ class NotificationInbox extends Component
         try {
             $this->apiClient->post('/api/notifications/read-all');
         } catch (\RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
+            Log::error($e->getMessage(), ['exception' => $e]);
+            session()->flash('error', 'Something went wrong. Please try again.');
         }
     }
 
@@ -94,7 +97,8 @@ class NotificationInbox extends Component
             $notifications = [];
             $meta = [];
             $notificationTypes = [];
-            session()->flash('error', $e->getMessage());
+            Log::error($e->getMessage(), ['exception' => $e]);
+            session()->flash('error', 'Something went wrong. Please try again.');
         }
 
         return view('livewire.notification.notification-inbox', [

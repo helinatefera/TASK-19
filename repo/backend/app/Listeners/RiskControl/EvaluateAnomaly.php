@@ -4,6 +4,7 @@ namespace App\Listeners\RiskControl;
 
 use App\Events\AnomalyDetected;
 use App\Events\RefundApproved;
+use App\Events\RefundRequested;
 use App\Models\Order;
 use App\Services\RiskControl\AnomalyDetectionService;
 
@@ -13,7 +14,7 @@ class EvaluateAnomaly
         private readonly AnomalyDetectionService $anomalyDetectionService,
     ) {}
 
-    public function handle(RefundApproved $event): void
+    public function handle(RefundApproved|RefundRequested $event): void
     {
         try {
             $refundRequest = $event->refundRequest;

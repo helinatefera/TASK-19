@@ -95,8 +95,8 @@ class NotificationTemplateSeeder extends Seeder
                 'key' => 'booking.reminder',
                 'type' => NotificationType::Alert,
                 'locales' => [
-                    'en' => ['title' => 'Upcoming Event', 'body' => 'Reminder: Your event is starting at {{event_time}}.'],
-                    'es' => ['title' => 'Evento Próximo', 'body' => 'Recordatorio: Su evento comienza a las {{event_time}}.'],
+                    'en' => ['title' => 'Upcoming Event', 'body' => 'Reminder: Your event is starting at {{starts_at}}.'],
+                    'es' => ['title' => 'Evento Próximo', 'body' => 'Recordatorio: Su evento comienza a las {{starts_at}}.'],
                 ],
             ],
             [

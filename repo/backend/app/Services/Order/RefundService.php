@@ -6,6 +6,7 @@ use App\Enums\OrderStatus;
 use App\Enums\RefundStatus;
 use App\Events\RefundApproved;
 use App\Events\RefundRejected;
+use App\Events\RefundRequested;
 use App\Models\Order;
 use App\Models\RefundRequest;
 use App\Models\User;
@@ -35,6 +36,12 @@ class RefundService
         ]);
 
         $order->update(['has_pending_refund' => true]);
+
+        try {
+            RefundRequested::dispatch($refundRequest, $user);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return $refundRequest;
     }

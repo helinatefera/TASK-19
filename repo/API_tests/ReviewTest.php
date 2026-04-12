@@ -44,7 +44,7 @@ test('POST /api/orders/{id}/reviews on fulfilled order creates review', function
             ['dimension' => 'communication', 'rating' => 4],
         ],
         'tags' => ['excellent', 'recommended'],
-    ]);
+    ], ['X-Idempotency-Key' => 'review-create-' . uniqid()]);
 
     $response->assertStatus(201)
         ->assertJsonStructure([
@@ -82,7 +82,7 @@ test('POST /api/orders/{id}/reviews on unfulfilled order returns error', functio
         'side' => 'user_to_creator',
         'overall_rating' => 5,
         'body' => 'This should not work',
-    ]);
+    ], ['X-Idempotency-Key' => 'review-unfulfilled-' . uniqid()]);
 
     $response->assertStatus(403);
 });

@@ -36,7 +36,7 @@ test('POST /api/admin/users creates new user', function () {
         'password' => 'NewUser123!@#',
         'display_name' => 'New User',
         'roles' => ['user'],
-    ]);
+    ], ['X-Idempotency-Key' => 'admin-create-user-' . uniqid()]);
 
     $response->assertStatus(201)
         ->assertJsonFragment([

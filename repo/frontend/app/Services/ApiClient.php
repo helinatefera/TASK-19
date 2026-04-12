@@ -44,9 +44,12 @@ class ApiClient
         return $this->handleResponse($response);
     }
 
-    public function postWithFile(string $path, array $data = [], string $fileKey = 'attachment', $file = null): array
+    public function postWithFile(string $path, array $data = [], string $fileKey = 'attachment', $file = null, array $headers = []): array
     {
         $request = $this->request();
+        if (!empty($headers)) {
+            $request = $request->withHeaders($headers);
+        }
 
         if ($file) {
             $request = $request->attach(

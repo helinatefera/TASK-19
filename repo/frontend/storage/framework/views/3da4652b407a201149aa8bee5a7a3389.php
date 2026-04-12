@@ -83,4 +83,4 @@
 <?php $component = $__componentOriginal1e6834b7596effc838ab3adb1475b477; ?>
 <?php unset($__componentOriginal1e6834b7596effc838ab3adb1475b477); ?>
 <?php endif; ?>
-<?php /**PATH /var/www/html/resources/views/auth/login.blade.php ENDPATH**/ ?>
+<?php /**PATH /Users/macbookpro/Projects/eaglepoint/TASK-19/repo/frontend/resources/views/auth/login.blade.php ENDPATH**/ ?>

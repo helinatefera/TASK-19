@@ -94,6 +94,10 @@ test('attempting to delete a DisputeDecision via ORM throws LogicException', fun
 })->throws(LogicException::class, 'Dispute decisions are immutable and cannot be deleted.');
 
 test('database trigger denies raw SQL update on dispute_decisions', function () {
+    if (DB::getDriverName() !== 'pgsql') {
+        $this->markTestSkipped('Database triggers only exist on PostgreSQL.');
+    }
+
     $decision = DisputeDecision::create([
         'dispute_id' => $this->dispute->id,
         'decided_by' => $this->user->id,
@@ -112,6 +116,10 @@ test('database trigger denies raw SQL update on dispute_decisions', function () 
 });
 
 test('database trigger denies raw SQL delete on dispute_decisions', function () {
+    if (DB::getDriverName() !== 'pgsql') {
+        $this->markTestSkipped('Database triggers only exist on PostgreSQL.');
+    }
+
     $decision = DisputeDecision::create([
         'dispute_id' => $this->dispute->id,
         'decided_by' => $this->user->id,

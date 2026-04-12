@@ -1,63 +1,70 @@
-# Revalidation of Issues From .tmp/audit_report-2.md.md (Static-Only)
+# Issue Recheck Results (Static)
 
-Date: 2026-04-10
-Method: Static code inspection only (no runtime execution used as evidence)
+Source reviewed: .tmp/audit_report-2.md
+Boundary: static-only, no runtime execution
 
-## Overall Revalidation Result
-- Issues reviewed: 6
-- Fixed: 6
+## Summary
+- Total issues rechecked: 5
+- Fixed: 5
 - Not fixed: 0
+- Partially fixed: 0
 
-## Detailed Status
+## Detailed Results
 
-### F-001 Staff all-orders workflow conflicts with backend user-only order index scope
+### F-001
+- Title: Idempotency key generation is per HTTP call, not per user action
 - Status: Fixed
-- Current evidence:
-  - backend/app/Http/Controllers/Api/Order/OrderController.php:28-31
-  - backend/app/Http/Controllers/Api/Order/OrderController.php:25-26
-- Revalidation note:
-  - Backend now allows staff/moderator/admin broader list access and keeps regular users scoped.
+- Evidence:
+  - frontend/app/Services/ApiClient.php:25
+  - frontend/app/Services/ApiClient.php:47
+  - frontend/app/Livewire/Booking/SeatMap.php:85
+  - frontend/app/Livewire/Booking/SeatMap.php:97
+  - frontend/app/Livewire/Booking/SeatMap.php:142
+  - frontend/app/Livewire/Campaign/CampaignDetail.php:122
+  - frontend/app/Livewire/Campaign/CampaignDetail.php:136
+- Recheck note:
+  - ApiClient no longer auto-generates an idempotency key per POST call.
+  - Key creation/reuse is moved to action scopes in Livewire components (session-backed per logical action), and keys are only cleared after successful completion.
 
-### F-002 Order type filter contract mismatch
+### F-002
+- Title: Graylist restriction is modeled but not enforced in booking/order decision paths
 - Status: Fixed
-- Current evidence:
-  - frontend/app/Livewire/Order/OrderList.php:67-69
-  - backend/app/Http/Controllers/Api/Order/OrderController.php:37-39
-- Revalidation note:
-  - Frontend and backend now both use order_type.
+- Evidence:
+  - backend/app/Http/Controllers/Api/Order/OrderController.php:84
+  - backend/app/Http/Controllers/Api/Booking/BookingController.php:64
+  - backend/app/Models/CreditScore.php:76
+- Recheck note:
+  - Booking and order entry points now reject users that require staff approval (`requiresStaffApproval()`), operationalizing graylist restriction behavior.
 
-### F-003 Notification inbox read filter mismatch
+### F-003
+- Title: Refund-frequency anomaly evaluation is wired only to RefundApproved events
 - Status: Fixed
-- Current evidence:
-  - frontend/app/Livewire/Notification/NotificationInbox.php:73-77
-  - frontend/app/Livewire/Notification/NotificationInbox.php:79-81
-- Revalidation note:
-  - Frontend filter now maps to backend read=true/read=false query contract.
+- Evidence:
+  - backend/app/Providers/EventServiceProvider.php:100
+  - backend/app/Providers/EventServiceProvider.php:105
+  - backend/app/Listeners/RiskControl/EvaluateAnomaly.php:17
+- Recheck note:
+  - `EvaluateAnomaly` is now bound to both `RefundRequested` and `RefundApproved`, and the listener handles both event types.
 
-### F-004 Pagination response parsing mismatch in frontend list components
+### F-004
+- Title: Frontend campaign duration validation remains wider than prompt/backend defaults
 - Status: Fixed
-- Current evidence:
-  - frontend/app/Livewire/Order/OrderList.php:78-83
-  - frontend/app/Livewire/Notification/NotificationInbox.php:86-91
-- Revalidation note:
-  - Both components now handle top-level paginator fields when meta is absent.
+- Evidence:
+  - frontend/app/Livewire/Campaign/CampaignForm.php:31
+  - frontend/app/Livewire/Campaign/CampaignForm.php:94
+- Recheck note:
+  - Frontend campaign duration validation now enforces `min:7|max:60` at both property and submit-time validation.
 
-### F-005 Strict client-key booking idempotency requirement weakened by server fallback generation
+### F-005
+- Title: Stack documentation can be clearer about backend vs frontend framework versions
 - Status: Fixed
-- Current evidence:
-  - backend/app/Http/Controllers/Api/Booking/BookingController.php:106-109
-  - backend/app/Http/Controllers/Api/Booking/BookingController.php:116-118
-- Revalidation note:
-  - API now rejects missing X-Idempotency-Key and passes explicit key to booking service.
+- Evidence:
+  - README.md:99
+  - README.md:108
+  - frontend/composer.json:7
+- Recheck note:
+  - README now separates Backend Stack and Frontend Stack sections with explicit framework/version lines, and frontend versions align with composer constraints.
 
-### F-006 Notification templates seeded only for English locale
-- Status: Fixed
-- Current evidence:
-  - backend/database/seeders/NotificationTemplateSeeder.php:145-147
-  - backend/database/seeders/NotificationTemplateSeeder.php:149-150
-- Revalidation note:
-  - Seeder now iterates template locales and writes entries by locale key, indicating multi-locale seed support (including Spanish when present in template data).
-
-## Final Conclusion
-- All six issues from .tmp/audit_report-2.md.md are now statically verified as fixed in current code.
-- This revalidation is static-only; runtime behavior remains subject to manual verification if required by acceptance process.
+## Updated Overall Assessment for This Issue Set
+- All five tracked findings from `.tmp/audit_report-2.md` are now statically verified as fixed.
+- This specific issue set is fully closed under static-review boundaries.

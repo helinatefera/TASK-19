@@ -26,7 +26,7 @@ test('GET /api/time-slots/{id} returns availability info', function () {
 test('POST /api/time-slots/{id}/lock creates a seat lock', function () {
     $response = $this->actingAs($this->user)->postJson("/api/time-slots/{$this->timeSlot->id}/lock", [
         'quantity' => 2,
-    ]);
+    ], ['X-Idempotency-Key' => 'lock-seats-' . uniqid()]);
 
     $response->assertStatus(201)
         ->assertJsonStructure([
@@ -46,7 +46,7 @@ test('POST /api/time-slots/{id}/lock when no seats available returns error', fun
 
     $response = $this->actingAs($this->user)->postJson("/api/time-slots/{$this->timeSlot->id}/lock", [
         'quantity' => 1,
-    ]);
+    ], ['X-Idempotency-Key' => 'lock-full-' . uniqid()]);
 
     $response->assertStatus(409);
 });
@@ -131,6 +131,58 @@ test('POST /api/seat-locks/{id}/confirm without X-Idempotency-Key returns 422', 
 
     $response->assertStatus(422);
     expect($response->json('msg'))->toContain('Idempotency-Key');
+});
+
+test('graylisted user is blocked from locking seats', function () {
+    $user = User::where('username', 'user2')->first();
+
+    \App\Models\CreditScore::updateOrCreate(
+        ['user_id' => $user->id],
+        [
+            'score' => 500,
+            'no_show_count' => 0,
+            'chargeback_count' => 0,
+            'refund_count' => 0,
+            'violation_count' => 0,
+            'restriction_level' => \App\Enums\RestrictionLevel::Gray,
+        ],
+    );
+
+    $response = $this->actingAs($user)->postJson("/api/time-slots/{$this->timeSlot->id}/lock", [
+        'quantity' => 1,
+    ], ['X-Idempotency-Key' => 'gray-lock-' . uniqid()]);
+
+    $response->assertStatus(403);
+    expect($response->json('msg'))->toContain('under review');
+});
+
+test('same idempotency key on seat lock confirm replays response', function () {
+    $lock = SeatLock::create([
+        'time_slot_id' => $this->timeSlot->id,
+        'user_id' => $this->user->id,
+        'quantity' => 1,
+        'locked_until' => now()->addMinutes(SeatLock::LOCK_TTL_MINUTES),
+    ]);
+
+    $stableKey = 'stable-confirm-' . uniqid();
+
+    $response1 = $this->actingAs($this->user)->postJson(
+        "/api/seat-locks/{$lock->id}/confirm",
+        ['amount' => 5000],
+        ['X-Idempotency-Key' => $stableKey],
+    );
+
+    $response1->assertStatus(201);
+    $orderId = $response1->json('order.id');
+
+    // Retry with same key => replayed, not a new order
+    $response2 = $this->actingAs($this->user)->postJson(
+        "/api/seat-locks/{$lock->id}/confirm",
+        ['amount' => 5000],
+        ['X-Idempotency-Key' => $stableKey],
+    );
+
+    expect($response2->json('order.id') ?? $orderId)->toBe($orderId);
 });
 
 test('DELETE /api/seat-locks/{id} releases the lock', function () {

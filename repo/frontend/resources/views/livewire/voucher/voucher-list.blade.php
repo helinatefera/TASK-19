@@ -67,7 +67,7 @@
                                 @endif
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                <a href="{{ route('vouchers.show', ['voucher' => $voucher['id']]) }}" class="text-indigo-600 hover:text-indigo-900 font-medium">View</a>
+                                <a href="{{ route('vouchers.detail', ['voucherId' => $voucher['id']]) }}" class="text-indigo-600 hover:text-indigo-900 font-medium">View</a>
                             </td>
                         </tr>
                     @endforeach

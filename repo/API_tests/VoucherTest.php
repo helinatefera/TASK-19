@@ -22,7 +22,7 @@ test('after payment, voucher is created', function () {
         'campaign_id' => $this->campaign->id,
         'reward_tier_id' => $this->rewardTier->id,
         'request_key' => $requestKey,
-    ]);
+    ], ['X-Idempotency-Key' => $requestKey]);
 
     $orderId = $createResponse->json('id');
 
@@ -30,7 +30,7 @@ test('after payment, voucher is created', function () {
     $this->actingAs($this->staff)->postJson("/api/orders/{$orderId}/payments", [
         'method' => 'cash',
         'amount' => $this->rewardTier->price,
-    ]);
+    ], ['X-Idempotency-Key' => 'payment-voucher-' . $orderId . '-' . uniqid()]);
 
     // Check that a voucher was created
     $voucher = Voucher::where('order_id', $orderId)->first();
@@ -46,14 +46,14 @@ test('POST /api/vouchers/{id}/redeem by staff redeems voucher', function () {
         'campaign_id' => $this->campaign->id,
         'reward_tier_id' => $this->rewardTier->id,
         'request_key' => $requestKey,
-    ]);
+    ], ['X-Idempotency-Key' => $requestKey]);
 
     $orderId = $createResponse->json('id');
 
     $this->actingAs($this->staff)->postJson("/api/orders/{$orderId}/payments", [
         'method' => 'cash',
         'amount' => $this->rewardTier->price,
-    ]);
+    ], ['X-Idempotency-Key' => 'payment-redeem-' . $orderId . '-' . uniqid()]);
 
     $voucher = Voucher::where('order_id', $orderId)->first();
 
@@ -73,14 +73,14 @@ test('POST /api/vouchers/{id}/redeem twice returns error', function () {
         'campaign_id' => $this->campaign->id,
         'reward_tier_id' => $this->rewardTier->id,
         'request_key' => $requestKey,
-    ]);
+    ], ['X-Idempotency-Key' => $requestKey]);
 
     $orderId = $createResponse->json('id');
 
     $this->actingAs($this->staff)->postJson("/api/orders/{$orderId}/payments", [
         'method' => 'cash',
         'amount' => $this->rewardTier->price,
-    ]);
+    ], ['X-Idempotency-Key' => 'payment-double-redeem-' . $orderId . '-' . uniqid()]);
 
     $voucher = Voucher::where('order_id', $orderId)->first();
 

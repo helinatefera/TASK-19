@@ -41,7 +41,7 @@ test('user cannot create dispute on another users order', function () {
     // user2 tries to create a dispute on user1's order
     $response = $this->actingAs($this->user2)->postJson("/api/orders/{$order->id}/disputes", [
         'reason' => 'Trying to dispute someone elses order',
-    ]);
+    ], ['X-Idempotency-Key' => 'dispute-unauth-' . uniqid()]);
 
     $response->assertStatus(403);
 });
@@ -61,7 +61,7 @@ test('user can create dispute on their own order', function () {
 
     $response = $this->actingAs($this->user1)->postJson("/api/orders/{$order->id}/disputes", [
         'reason' => 'Legitimate dispute on my own order',
-    ]);
+    ], ['X-Idempotency-Key' => 'dispute-own-' . uniqid()]);
 
     $response->assertStatus(201);
 });
@@ -128,4 +128,98 @@ test('staff can resolve after-sales requests', function () {
     ]);
 
     $response->assertStatus(200);
+});
+
+// ── After-sales checksum contract ──────────────────────────────────
+
+test('after-sales submit with valid checksum succeeds', function () {
+    $order = Order::create([
+        'user_id' => $this->user1->id,
+        'campaign_id' => $this->campaign->id,
+        'reward_tier_id' => $this->rewardTier->id,
+        'request_key' => 'authz-checksum-valid-' . uniqid(),
+        'confirmation_number' => 'CC-' . now()->format('ymd') . '-CSUM01',
+        'order_type' => OrderType::Contribution,
+        'amount' => $this->rewardTier->price,
+        'currency' => 'USD',
+        'status' => OrderStatus::Fulfilled,
+        'fulfilled_at' => now(),
+    ]);
+
+    $file = \Illuminate\Http\UploadedFile::fake()->create('document.pdf', 100, 'application/pdf');
+    $checksum = hash_file('sha256', $file->getRealPath());
+
+    $response = $this->actingAs($this->user1)->postJson(
+        "/api/orders/{$order->id}/after-sales",
+        [
+            'type' => 'complaint',
+            'reason' => 'Testing valid checksum',
+            'attachment' => $file,
+            'client_checksum' => $checksum,
+        ],
+        ['X-Idempotency-Key' => 'aftersales-valid-checksum-' . uniqid()],
+    );
+
+    $response->assertStatus(201);
+});
+
+test('after-sales submit without client_checksum returns 422', function () {
+    $order = Order::create([
+        'user_id' => $this->user1->id,
+        'campaign_id' => $this->campaign->id,
+        'reward_tier_id' => $this->rewardTier->id,
+        'request_key' => 'authz-checksum-missing-' . uniqid(),
+        'confirmation_number' => 'CC-' . now()->format('ymd') . '-CSUM02',
+        'order_type' => OrderType::Contribution,
+        'amount' => $this->rewardTier->price,
+        'currency' => 'USD',
+        'status' => OrderStatus::Fulfilled,
+        'fulfilled_at' => now(),
+    ]);
+
+    $file = \Illuminate\Http\UploadedFile::fake()->create('document.pdf', 100, 'application/pdf');
+
+    $response = $this->actingAs($this->user1)->postJson(
+        "/api/orders/{$order->id}/after-sales",
+        [
+            'type' => 'complaint',
+            'reason' => 'Testing missing checksum',
+            'attachment' => $file,
+        ],
+        ['X-Idempotency-Key' => 'aftersales-no-checksum-' . uniqid()],
+    );
+
+    $response->assertStatus(422)
+        ->assertJsonValidationErrors(['client_checksum']);
+});
+
+test('after-sales submit with mismatched checksum returns 422', function () {
+    $order = Order::create([
+        'user_id' => $this->user1->id,
+        'campaign_id' => $this->campaign->id,
+        'reward_tier_id' => $this->rewardTier->id,
+        'request_key' => 'authz-checksum-mismatch-' . uniqid(),
+        'confirmation_number' => 'CC-' . now()->format('ymd') . '-CSUM03',
+        'order_type' => OrderType::Contribution,
+        'amount' => $this->rewardTier->price,
+        'currency' => 'USD',
+        'status' => OrderStatus::Fulfilled,
+        'fulfilled_at' => now(),
+    ]);
+
+    $file = \Illuminate\Http\UploadedFile::fake()->create('document.pdf', 100, 'application/pdf');
+
+    $response = $this->actingAs($this->user1)->postJson(
+        "/api/orders/{$order->id}/after-sales",
+        [
+            'type' => 'complaint',
+            'reason' => 'Testing mismatched checksum',
+            'attachment' => $file,
+            'client_checksum' => 'deadbeef00000000000000000000000000000000000000000000000000000000',
+        ],
+        ['X-Idempotency-Key' => 'aftersales-bad-checksum-' . uniqid()],
+    );
+
+    $response->assertStatus(422)
+        ->assertJsonFragment(['msg' => 'Attachment checksum mismatch. The file may have been corrupted during upload.']);
 });

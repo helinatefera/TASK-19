@@ -53,7 +53,7 @@ test('POST /api/risk/chargebacks by staff records chargeback', function () {
 
     $response = $this->actingAs($this->staff)->postJson('/api/risk/chargebacks', [
         'order_id' => $order->id,
-    ]);
+    ], ['X-Idempotency-Key' => 'chargeback-' . uniqid()]);
 
     $response->assertStatus(201)
         ->assertJsonStructure([

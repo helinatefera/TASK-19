@@ -128,11 +128,19 @@ class OrderDetail extends Component
             'refundAmount' => 'required|integer|min:1|max:' . ($this->order['amount'] ?? 0),
         ]);
 
+        $scope = "idempotency:refund:{$this->orderId}";
+        $key = session($scope);
+        if (! $key) {
+            $key = 'refund-' . $this->orderId . '-' . uniqid();
+            session()->put($scope, $key);
+        }
+
         try {
             $this->apiClient->post("/api/orders/{$this->orderId}/refunds", [
                 'reason' => $this->refundReason,
                 'refund_amount' => $this->refundAmount,
-            ]);
+            ], ['X-Idempotency-Key' => $key]);
+            session()->forget($scope);
             $this->successMessage = 'Refund request submitted successfully.';
             $this->showRefundModal = false;
             $this->refundReason = '';
@@ -197,17 +205,29 @@ class OrderDetail extends Component
             'afterSalesAttachment' => 'required|file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
 
+        $scope = "idempotency:aftersales:{$this->orderId}";
+        $key = session($scope);
+        if (! $key) {
+            $key = 'aftersales-' . $this->orderId . '-' . uniqid();
+            session()->put($scope, $key);
+        }
+
         try {
+            $checksum = hash_file('sha256', $this->afterSalesAttachment->getRealPath());
+
             $this->apiClient->postWithFile(
                 "/api/orders/{$this->orderId}/after-sales",
                 [
                     'type' => $this->afterSalesType,
                     'reason' => $this->afterSalesReason,
+                    'client_checksum' => $checksum,
                 ],
                 'attachment',
-                $this->afterSalesAttachment
+                $this->afterSalesAttachment,
+                ['X-Idempotency-Key' => $key]
             );
 
+            session()->forget($scope);
             $this->successMessage = 'After-sales request submitted.';
             $this->showAfterSalesModal = false;
             $this->afterSalesType = '';
@@ -266,12 +286,20 @@ class OrderDetail extends Component
             'transactionRef' => 'nullable|string|max:255',
         ]);
 
+        $scope = "idempotency:payment:{$this->orderId}";
+        $key = session($scope);
+        if (! $key) {
+            $key = 'payment-' . $this->orderId . '-' . uniqid();
+            session()->put($scope, $key);
+        }
+
         try {
             $this->apiClient->post("/api/orders/{$this->orderId}/payments", [
                 'method' => $this->paymentMethod,
                 'amount' => $this->paymentAmount,
                 'transaction_ref' => $this->transactionRef ?: null,
-            ]);
+            ], ['X-Idempotency-Key' => $key]);
+            session()->forget($scope);
             $this->successMessage = 'Payment recorded successfully.';
             $this->transactionRef = '';
             $this->loadOrder();

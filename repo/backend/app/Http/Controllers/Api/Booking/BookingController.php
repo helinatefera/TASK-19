@@ -56,10 +56,13 @@ class BookingController extends BaseController
      */
     public function lock(Request $request, TimeSlot $timeSlot): JsonResponse
     {
-        // Enforce blacklist restriction
+        // Enforce credit-score restrictions
         $creditScore = $request->user()->creditScore;
         if ($creditScore && ! $creditScore->canPlaceOrders()) {
             return $this->error('Your account is currently restricted from making bookings.', 403);
+        }
+        if ($creditScore && $creditScore->requiresStaffApproval()) {
+            return $this->error('Your account is under review and requires staff approval to make bookings.', 403);
         }
 
         $request->validate([

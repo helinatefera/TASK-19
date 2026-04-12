@@ -1,9 +1,9 @@
 <?php return array(
     'root' => array(
         'name' => 'civiccrowd/frontend',
-        'pretty_version' => '1.0.0+no-version-set',
-        'version' => '1.0.0.0',
-        'reference' => null,
+        'pretty_version' => 'dev-main',
+        'version' => 'dev-main',
+        'reference' => '7a0b69eb8dab326a57b4a231e0d6743d4617d89c',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -38,9 +38,9 @@
             'dev_requirement' => false,
         ),
         'civiccrowd/frontend' => array(
-            'pretty_version' => '1.0.0+no-version-set',
-            'version' => '1.0.0.0',
-            'reference' => null,
+            'pretty_version' => 'dev-main',
+            'version' => 'dev-main',
+            'reference' => '7a0b69eb8dab326a57b4a231e0d6743d4617d89c',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

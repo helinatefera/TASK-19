@@ -30,6 +30,7 @@ class AfterSalesController extends BaseController
             'type' => 'required|string|in:refund,exchange,complaint,other',
             'reason' => 'required|string|max:2000',
             'attachment' => 'required|file|max:10240|mimes:jpg,jpeg,png,pdf,doc,docx',
+            'client_checksum' => 'required|string',
         ]);
 
         $data = [
@@ -42,11 +43,17 @@ class AfterSalesController extends BaseController
 
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
+            $serverChecksum = hash_file('sha256', $file->getRealPath());
+
+            if (! hash_equals($serverChecksum, $request->input('client_checksum'))) {
+                return $this->error('Attachment checksum mismatch. The file may have been corrupted during upload.', 422);
+            }
+
             $path = $file->store('after-sales', 'local');
 
             $data['attachment_path'] = $path;
             $data['attachment_mime'] = $file->getMimeType();
-            $data['attachment_checksum'] = hash_file('sha256', $file->getRealPath());
+            $data['attachment_checksum'] = $serverChecksum;
             $data['attachment_size'] = $file->getSize();
         }
 

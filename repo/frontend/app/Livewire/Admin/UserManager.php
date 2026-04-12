@@ -57,14 +57,22 @@ class UserManager extends Component
             'newDisplayName' => 'nullable|string|max:255',
         ]);
 
+        $scope = 'idempotency:admin:create-user';
+        $key = session($scope);
+        if (! $key) {
+            $key = 'admin-user-' . uniqid();
+            session()->put($scope, $key);
+        }
+
         try {
             $this->apiClient->post('/api/admin/users', [
                 'username' => $this->newUsername,
                 'password' => $this->newPassword,
                 'display_name' => $this->newDisplayName ?: null,
                 'roles' => $this->newRoles,
-            ]);
+            ], ['X-Idempotency-Key' => $key]);
 
+            session()->forget($scope);
             $this->showCreateModal = false;
             $this->reset(['newUsername', 'newPassword', 'newDisplayName', 'newRoles']);
 
