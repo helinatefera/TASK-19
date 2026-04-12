@@ -56,6 +56,13 @@ run_tests_docker() {
     echo "[Mode] Docker – running tests inside containers"
     echo ""
 
+    # Stop queue and scheduler containers – their entrypoints re-seed the
+    # database on restart, which conflicts with the test suite's
+    # migrate:fresh.  They are not needed during testing.
+    echo "[Setup] Stopping background workers to avoid DB conflicts..."
+    docker stop civiccrowd_backend_queue civiccrowd_backend_scheduler 2>/dev/null || true
+    echo ""
+
     wait_for_container "$BACKEND_CONTAINER"
 
     # ---- Backend Unit Tests ----
