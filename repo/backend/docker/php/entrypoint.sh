@@ -3,6 +3,13 @@ set -e
 
 cd /var/www/html
 
+# Ensure Laravel directories exist (volume mounts override Dockerfile mkdir)
+mkdir -p storage/logs \
+         storage/framework/sessions \
+         storage/framework/views \
+         storage/framework/cache \
+         bootstrap/cache
+
 # Generate APP_KEY if not provided (required for encryption/sessions)
 if [ -z "${APP_KEY}" ]; then
     export APP_KEY="base64:$(head -c 32 /dev/urandom | base64)"

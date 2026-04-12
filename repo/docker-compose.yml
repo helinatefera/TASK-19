@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: civiccrowd
       POSTGRES_USER: civiccrowd
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-civiccrowd_dev_secret}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -13,6 +13,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
     networks:
       - civiccrowd
     restart: unless-stopped
@@ -29,7 +30,7 @@ services:
     environment:
       APP_NAME: CivicCrowd
       APP_ENV: local
-      APP_DEBUG: "false"
+      APP_DEBUG: "true"
       APP_URL: http://localhost:8081
       APP_KEY: ${APP_KEY:-}
       APP_TIMEZONE: UTC
@@ -41,7 +42,7 @@ services:
       DB_PORT: 5432
       DB_DATABASE: civiccrowd
       DB_USERNAME: civiccrowd
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-civiccrowd_dev_secret}
       SESSION_DRIVER: database
       SESSION_LIFETIME: 120
       SESSION_ENCRYPT: "true"
@@ -50,7 +51,7 @@ services:
       BROADCAST_CONNECTION: log
       MAIL_MAILER: log
       LOG_CHANNEL: stderr
-      LOG_LEVEL: warning
+      LOG_LEVEL: debug
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,7 +91,7 @@ services:
       DB_PORT: 5432
       DB_DATABASE: civiccrowd
       DB_USERNAME: civiccrowd
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-civiccrowd_dev_secret}
       QUEUE_CONNECTION: database
       CACHE_STORE: database
       MAIL_MAILER: log
@@ -121,7 +122,7 @@ services:
       DB_PORT: 5432
       DB_DATABASE: civiccrowd
       DB_USERNAME: civiccrowd
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-civiccrowd_dev_secret}
       QUEUE_CONNECTION: database
       CACHE_STORE: database
       MAIL_MAILER: log
@@ -144,7 +145,7 @@ services:
     environment:
       APP_NAME: CivicCrowd
       APP_ENV: local
-      APP_DEBUG: "false"
+      APP_DEBUG: "true"
       APP_URL: http://localhost:8080
       APP_KEY: ${FRONTEND_APP_KEY:-}
       BACKEND_URL: http://backend-nginx:80
@@ -153,7 +154,7 @@ services:
       SESSION_ENCRYPT: "true"
       CACHE_STORE: file
       LOG_CHANNEL: stderr
-      LOG_LEVEL: warning
+      LOG_LEVEL: debug
     depends_on:
       - backend-nginx
     networks:
