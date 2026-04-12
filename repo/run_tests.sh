@@ -36,17 +36,20 @@ docker_containers_running() {
 
 wait_for_container() {
     local ctr="$1"
-    local max=60
+    local max=300
     local elapsed=0
-    echo "[Setup] Waiting for $ctr to be ready..."
+    echo "[Setup] Waiting for $ctr to be ready (entrypoint + composer install)..."
     while [ $elapsed -lt $max ]; do
-        if docker exec "$ctr" php -r 'echo "ok";' &>/dev/null; then
+        # Check that the app can actually bootstrap – this means the
+        # entrypoint has finished composer install, migrations, etc.
+        if docker exec "$ctr" php artisan --version &>/dev/null; then
+            echo "[Setup] $ctr is ready."
             return 0
         fi
-        sleep 2
-        elapsed=$((elapsed + 2))
+        sleep 5
+        elapsed=$((elapsed + 5))
     done
-    echo "[WARN] Timed out waiting for $ctr – running tests anyway."
+    echo "[WARN] Timed out after ${max}s waiting for $ctr."
 }
 
 run_tests_docker() {
@@ -54,11 +57,6 @@ run_tests_docker() {
     echo ""
 
     wait_for_container "$BACKEND_CONTAINER"
-
-    # Ensure composer deps are installed inside the backend container
-    echo "[Setup] Installing backend dependencies inside container..."
-    docker exec "$BACKEND_CONTAINER" composer install --no-interaction --ignore-platform-reqs 2>&1 || true
-    echo ""
 
     # ---- Backend Unit Tests ----
     echo "============================================"
@@ -104,10 +102,6 @@ run_tests_docker() {
     SUITES=$((SUITES + 1))
 
     wait_for_container "$FRONTEND_CONTAINER"
-
-    # Ensure composer deps are installed inside the frontend container
-    echo "[Setup] Installing frontend dependencies inside container..."
-    docker exec "$FRONTEND_CONTAINER" composer install --no-interaction --ignore-platform-reqs 2>&1 || true
 
     if docker exec "$FRONTEND_CONTAINER" php artisan test 2>&1; then
         echo ""
