@@ -28,7 +28,7 @@ services:
       - ./unit_tests:/var/www/html/unit_tests
     environment:
       APP_NAME: CivicCrowd
-      APP_ENV: production
+      APP_ENV: local
       APP_DEBUG: "false"
       APP_URL: http://localhost:8081
       APP_KEY: ${APP_KEY:-}
@@ -82,7 +82,7 @@ services:
       - ./backend:/var/www/html
     environment:
       APP_NAME: CivicCrowd
-      APP_ENV: production
+      APP_ENV: local
       APP_DEBUG: "false"
       APP_KEY: ${APP_KEY:-}
       DB_CONNECTION: pgsql
@@ -113,7 +113,7 @@ services:
       - ./backend:/var/www/html
     environment:
       APP_NAME: CivicCrowd
-      APP_ENV: production
+      APP_ENV: local
       APP_DEBUG: "false"
       APP_KEY: ${APP_KEY:-}
       DB_CONNECTION: pgsql
@@ -143,7 +143,7 @@ services:
       - ./frontend:/var/www/html
     environment:
       APP_NAME: CivicCrowd
-      APP_ENV: production
+      APP_ENV: local
       APP_DEBUG: "false"
       APP_URL: http://localhost:8080
       APP_KEY: ${FRONTEND_APP_KEY:-}
