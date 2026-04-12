@@ -6,7 +6,7 @@ set -euo pipefail
 #
 # Self-bootstrapping: installs PHP via Homebrew if absent, uses SQLite
 # in-memory databases, requires zero external services (no Docker, no
-# PostgreSQL, no network).
+# PostgreSQL, no network after initial setup).
 # =============================================================================
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -71,14 +71,12 @@ find_composer() {
         COMPOSER="composer"
         return 0
     fi
-    # Check common locations
     for loc in /opt/homebrew/bin/composer /usr/local/bin/composer "$HOME/.composer/vendor/bin/composer"; do
         if [ -x "$loc" ]; then
             COMPOSER="$loc"
             return 0
         fi
     done
-    # Use local phar if previously downloaded
     if [ -f "$ROOT/.composer.phar" ]; then
         COMPOSER="$PHP $ROOT/.composer.phar"
         return 0
@@ -92,6 +90,63 @@ install_composer() {
     "$PHP" "$ROOT/.composer-setup.php" --install-dir="$ROOT" --filename=".composer.phar" --quiet
     rm -f "$ROOT/.composer-setup.php"
     COMPOSER="$PHP $ROOT/.composer.phar"
+}
+
+# -------------------------------------------------------------------
+# Generate a minimal .env for a Laravel project directory.
+# Everything is self-contained — no .env.example needed.
+# phpunit.xml overrides DB, cache, etc. for testing anyway.
+# -------------------------------------------------------------------
+generate_env() {
+    local dir="$1"
+    local app_name="$2"
+    local key="base64:$(head -c 32 /dev/urandom | base64)"
+
+    cat > "$dir/.env" <<ENVEOF
+APP_NAME=${app_name}
+APP_ENV=testing
+APP_KEY=${key}
+APP_DEBUG=true
+APP_URL=http://localhost
+
+DB_CONNECTION=sqlite
+DB_DATABASE=:memory:
+
+CACHE_STORE=array
+SESSION_DRIVER=array
+QUEUE_CONNECTION=sync
+MAIL_MAILER=array
+LOG_CHANNEL=stderr
+LOG_LEVEL=debug
+BROADCAST_CONNECTION=null
+ENVEOF
+}
+
+# -------------------------------------------------------------------
+# Prepare a Laravel project directory for local testing
+#   Usage: prepare_project <dir> <app_name>
+# -------------------------------------------------------------------
+prepare_project() {
+    local dir="$1"
+    local app_name="${2:-Laravel}"
+
+    # 1. Ensure all required Laravel directories exist
+    mkdir -p "$dir/bootstrap/cache" \
+             "$dir/storage/logs" \
+             "$dir/storage/framework/sessions" \
+             "$dir/storage/framework/views" \
+             "$dir/storage/framework/cache"
+
+    # 2. Generate a clean .env inline — no dependency on .env.example.
+    #    Tests override everything via phpunit.xml anyway.
+    generate_env "$dir" "$app_name"
+
+    # 3. Install Composer dependencies (don't swallow errors)
+    echo "[Setup] Installing dependencies in $(basename "$dir")..."
+    (cd "$dir" && $COMPOSER install --no-interaction 2>&1) || {
+        echo "[FATAL] Composer install failed in $(basename "$dir"). See output above."
+        exit 1
+    }
 }
 
 # -------------------------------------------------------------------
@@ -117,45 +172,20 @@ echo ""
 # Prepare backend
 # -------------------------------------------------------------------
 
-# Symlink shared test directories into backend (mirrors Docker volume mounts)
-# Replace empty placeholder dirs with symlinks to the real test directories
-if [ -d "$ROOT/API_tests" ]; then
-    if [ -d "$BACKEND/API_tests" ] && [ ! -L "$BACKEND/API_tests" ]; then
-        rm -rf "$BACKEND/API_tests"
+# Symlink shared test directories into backend (mirrors Docker volume mounts).
+# Replace empty placeholder dirs with symlinks to the real test directories.
+for dir_name in API_tests unit_tests; do
+    if [ -d "$ROOT/$dir_name" ]; then
+        if [ -d "$BACKEND/$dir_name" ] && [ ! -L "$BACKEND/$dir_name" ]; then
+            rm -rf "$BACKEND/$dir_name"
+        fi
+        if [ ! -e "$BACKEND/$dir_name" ]; then
+            ln -s "$ROOT/$dir_name" "$BACKEND/$dir_name"
+        fi
     fi
-    if [ ! -e "$BACKEND/API_tests" ]; then
-        ln -s "$ROOT/API_tests" "$BACKEND/API_tests"
-    fi
-fi
-if [ -d "$ROOT/unit_tests" ]; then
-    if [ -d "$BACKEND/unit_tests" ] && [ ! -L "$BACKEND/unit_tests" ]; then
-        rm -rf "$BACKEND/unit_tests"
-    fi
-    if [ ! -e "$BACKEND/unit_tests" ]; then
-        ln -s "$ROOT/unit_tests" "$BACKEND/unit_tests"
-    fi
-fi
+done
 
-# Ensure .env exists before composer install (package:discover needs it)
-if [ ! -f "$BACKEND/.env" ]; then
-    cp "$BACKEND/.env.example" "$BACKEND/.env"
-fi
-if ! grep -q '^APP_KEY=base64:' "$BACKEND/.env" 2>/dev/null; then
-    local_key="base64:$(head -c 32 /dev/urandom | base64)"
-    sed -i '' "s|^APP_KEY=.*|APP_KEY=${local_key}|" "$BACKEND/.env" 2>/dev/null || \
-        sed -i "s|^APP_KEY=.*|APP_KEY=${local_key}|" "$BACKEND/.env"
-fi
-
-# Ensure Laravel storage/cache directories exist
-mkdir -p "$BACKEND/bootstrap/cache" \
-         "$BACKEND/storage/logs" \
-         "$BACKEND/storage/framework/sessions" \
-         "$BACKEND/storage/framework/views" \
-         "$BACKEND/storage/framework/cache"
-
-echo "[Setup] Installing backend dependencies..."
-(cd "$BACKEND" && $COMPOSER install --no-interaction --quiet 2>&1 | tail -3)
-
+prepare_project "$BACKEND" "CivicCrowd-Backend"
 echo ""
 
 # ===================================================================
@@ -209,29 +239,7 @@ echo "============================================"
 echo ""
 SUITES=$((SUITES + 1))
 
-# Ensure Laravel storage/cache directories exist
-mkdir -p "$FRONTEND/bootstrap/cache" \
-         "$FRONTEND/storage/logs" \
-         "$FRONTEND/storage/framework/sessions" \
-         "$FRONTEND/storage/framework/views" \
-         "$FRONTEND/storage/framework/cache"
-
-# Ensure .env exists with APP_KEY before composer install
-if [ ! -f "$FRONTEND/.env" ]; then
-    cp "$FRONTEND/.env.example" "$FRONTEND/.env"
-fi
-if ! grep -q '^APP_KEY=base64:' "$FRONTEND/.env" 2>/dev/null; then
-    fe_key="base64:$(head -c 32 /dev/urandom | base64)"
-    if ! grep -q '^APP_KEY=' "$FRONTEND/.env" 2>/dev/null; then
-        echo "APP_KEY=${fe_key}" >> "$FRONTEND/.env"
-    else
-        sed -i '' "s|^APP_KEY=.*|APP_KEY=${fe_key}|" "$FRONTEND/.env" 2>/dev/null || \
-            sed -i "s|^APP_KEY=.*|APP_KEY=${fe_key}|" "$FRONTEND/.env"
-    fi
-fi
-
-echo "[Setup] Installing frontend dependencies..."
-(cd "$FRONTEND" && $COMPOSER install --no-interaction --quiet 2>&1 | tail -3)
+prepare_project "$FRONTEND" "CivicCrowd"
 
 if (cd "$FRONTEND" && $PHP artisan test 2>&1); then
     echo ""
