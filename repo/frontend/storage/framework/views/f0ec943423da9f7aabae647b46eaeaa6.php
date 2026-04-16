@@ -140,4 +140,4 @@
         <?php endif; ?><?php if(\Livewire\Mechanisms\ExtendBlade\ExtendBlade::isRenderingLivewireComponent()): ?><!--[if ENDBLOCK]><![endif]--><?php endif; ?>
     <?php endif; ?><?php if(\Livewire\Mechanisms\ExtendBlade\ExtendBlade::isRenderingLivewireComponent()): ?><!--[if ENDBLOCK]><![endif]--><?php endif; ?>
 </div>
-<?php /**PATH /Users/macbookpro/Projects/eaglepoint/TASK-19/repo/frontend/resources/views/livewire/campaign/campaign-list.blade.php ENDPATH**/ ?>
+<?php /**PATH /var/www/html/resources/views/livewire/campaign/campaign-list.blade.php ENDPATH**/ ?>
